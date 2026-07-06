@@ -1,0 +1,90 @@
+name: Notify Teams on PR
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post PR notification to Teams
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_AVATAR: ${{ github.event.pull_request.user.avatar_url }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          payload=$(jq -n \
+            --arg number "$PR_NUMBER" \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg author "$PR_AUTHOR" \
+            --arg avatar "$PR_AUTHOR_AVATAR" \
+            --arg branch "$PR_BRANCH" \
+            --arg base "$BASE_BRANCH" \
+            --arg repo "$REPO" \
+            '{
+              type: "message",
+              attachments: [{
+                contentType: "application/vnd.microsoft.card.adaptive",
+                contentUrl: null,
+                content: {
+                  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                  type: "AdaptiveCard",
+                  version: "1.4",
+                  body: [
+                    {
+                      type: "TextBlock",
+                      size: "Medium",
+                      weight: "Bolder",
+                      text: ("New Pull Request #" + $number + ": " + $title),
+                      wrap: true
+                    },
+                    {
+                      type: "ColumnSet",
+                      columns: [
+                        {
+                          type: "Column",
+                          width: "auto",
+                          items: [{
+                            type: "Image",
+                            url: $avatar,
+                            size: "Small",
+                            style: "Person"
+                          }]
+                        },
+                        {
+                          type: "Column",
+                          width: "stretch",
+                          items: [
+                            { type: "TextBlock", weight: "Bolder", text: $author },
+                            {
+                              type: "TextBlock",
+                              spacing: "None",
+                              text: ($repo + " · " + $branch + " → " + $base),
+                              isSubtle: true,
+                              wrap: true
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  actions: [
+                    {
+                      type: "Action.OpenUrl",
+                      title: "View Pull Request",
+                      url: $url
+                    }
+                  ]
+                }
+              }]
+            }')
+
+          curl -fsS -H "Content-Type: application/json" -d "$payload" "$TEAMS_WEBHOOK_URL"
