@@ -1,0 +1,140 @@
+@page "/licenses"
+@attribute [Authorize(Roles = "Admin,User")]
+@using Aegis.Server.AspNetCore.Data.Context
+@using Aegis.Server.Entities
+@using Aegis.Server.Services
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject LicenseService LicenseService
+@inject IJSRuntime Js
+
+<PageTitle>Licenses</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0">Licenses</h1>
+    <AuthorizeView Roles="Admin">
+        <a class="btn btn-primary" href="licenses/generate">Generate license</a>
+    </AuthorizeView>
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert alert-info">@_message</div>
+}
+
+@if (_licenses.Count == 0)
+{
+    <div class="alert alert-secondary">No licenses issued yet.</div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>License key</th>
+                    <th>Product</th>
+                    <th>Type</th>
+                    <th>Issued to</th>
+                    <th>Status</th>
+                    <th>Expires</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var license in _licenses)
+                {
+                    <tr>
+                        <td><code class="small">@license.LicenseKey</code></td>
+                        <td>@license.Product?.ProductName</td>
+                        <td>@license.Type</td>
+                        <td>@license.IssuedTo</td>
+                        <td>
+                            <span class="badge @StatusBadgeClass(license.Status)">@license.Status</span>
+                        </td>
+                        <td>@(license.ExpirationDate?.ToString("yyyy-MM-dd") ?? "-")</td>
+                        <td class="text-nowrap">
+                            <a class="btn btn-sm btn-outline-info me-1" href="licenses/@license.LicenseId">View</a>
+                            <button class="btn btn-sm btn-outline-primary me-1"
+                                    @onclick="() => DownloadAsync(license)">Download</button>
+                            <button class="btn btn-sm btn-outline-secondary me-1"
+                                    @onclick="() => CopyBase64Async(license)">Copy Base64</button>
+                            <AuthorizeView Roles="Admin" Context="revokeContext">
+                                <Authorized>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            @onclick="() => RevokeAsync(license)">Revoke</button>
+                                </Authorized>
+                            </AuthorizeView>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<License> _licenses = [];
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _licenses = await Db.Licenses
+            .Include(l => l.Product)
+            .OrderByDescending(l => l.IssuedOn)
+            .ToListAsync();
+    }
+
+    private static string StatusBadgeClass(LicenseStatus status) => status switch
+    {
+        LicenseStatus.Valid => "text-bg-success",
+        LicenseStatus.Expired => "text-bg-warning",
+        LicenseStatus.Revoked => "text-bg-danger",
+        _ => "text-bg-secondary"
+    };
+
+    private async Task DownloadAsync(License license)
+    {
+        try
+        {
+            var bytes = await RegenerateFileAsync(license);
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"{license.Product?.ProductName?.Replace(' ', '-') ?? "license"}-{license.LicenseKey[..8]}.bin";
+            await Js.InvokeVoidAsync("aegisDownloadFile", fileName, base64);
+            _message = $"Downloaded license file for {license.LicenseKey}.";
+        }
+        catch (Exception ex)
+        {
+            _message = $"Download failed: {ex.Message}";
+        }
+    }
+
+    private async Task CopyBase64Async(License license)
+    {
+        try
+        {
+            var bytes = await RegenerateFileAsync(license);
+            var base64 = Convert.ToBase64String(bytes);
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", base64);
+            _message = "License Base64 copied to clipboard.";
+        }
+        catch (Exception ex)
+        {
+            _message = $"Copy failed: {ex.Message}";
+        }
+    }
+
+    private async Task RevokeAsync(License license)
+    {
+        var result = await LicenseService.RevokeLicenseAsync(license.LicenseKey);
+        _message = result.IsSuccessful ? $"Revoked {license.LicenseKey}." : result.Exception?.Message ?? "Revoke failed.";
+        await LoadAsync();
+    }
+
+    private async Task<byte[]> RegenerateFileAsync(License license)
+    {
+        return await LicenseService.GetLicenseFileBytesAsync(license.LicenseId);
+    }
+}

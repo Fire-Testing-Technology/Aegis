@@ -38,6 +38,20 @@ public class LicenseService(AegisDbContext dbContext)
         return GenerateLicenseFile(license);
     }
 
+    /// <summary>
+    /// Rebuilds the signed license file bytes for an existing license record.
+    /// </summary>
+    public async Task<byte[]> GetLicenseFileBytesAsync(Guid licenseId)
+    {
+        var license = await dbContext.Licenses
+            .Include(l => l.LicenseFeatures).ThenInclude(lf => lf.Feature)
+            .Include(l => l.Product)
+            .FirstOrDefaultAsync(l => l.LicenseId == licenseId)
+            ?? throw new NotFoundException("License not found.");
+
+        return GenerateLicenseFile(license);
+    }
+
 
     /// <summary>
     ///     Validates a license asynchronously.
@@ -379,9 +393,13 @@ public class LicenseService(AegisDbContext dbContext)
         if (!await dbContext.Products.AnyAsync(p => p.ProductId == request.ProductId))
             throw new NotFoundException("Product not found");
 
-        if (request.Features.Count != 0 &&
-            !await dbContext.Features.AnyAsync(f => request.Features.Keys.Contains(f.FeatureId)))
-            throw new NotFoundException("Feature not found");
+        if (request.Features.Count != 0)
+        {
+            var matchingFeatures = await dbContext.Features.CountAsync(f =>
+                request.Features.Keys.Contains(f.FeatureId) && f.ProductId == request.ProductId);
+            if (matchingFeatures != request.Features.Count)
+                throw new NotFoundException("Feature not found for this product.");
+        }
 
         if (request.ExpirationDate.HasValue && request.ExpirationDate.Value < DateTime.UtcNow)
             throw new BadRequestException("Expiration date cannot be in the past");
@@ -397,9 +415,11 @@ public class LicenseService(AegisDbContext dbContext)
             MaxActiveUsersCount = request.MaxActiveUsersCount,
             ExpirationDate = request.ExpirationDate,
             SubscriptionExpiryDate = request.SubscriptionDuration != null
-                ? DateTime.UtcNow.Add(request.SubscriptionDuration!.Value)
+                ? DateTime.UtcNow.Add(request.SubscriptionDuration.Value)
                 : null,
-            HardwareId = request.HardwareId
+            HardwareId = request.HardwareId,
+            UserId = request.IssuingUserId ?? Guid.Empty,
+            Issuer = "Fire Testing Technology Ltd"
         };
     }
 

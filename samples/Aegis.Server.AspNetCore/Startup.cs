@@ -1,10 +1,13 @@
-﻿using System.Text.Json;
+﻿using Aegis.Server.AspNetCore.Components;
+using Aegis.Server.AspNetCore.Data;
 using Aegis.Server.AspNetCore.Data.Context;
 using Aegis.Server.AspNetCore.DTOs;
 using Aegis.Server.AspNetCore.Filters;
 using Aegis.Server.AspNetCore.Services;
 using Aegis.Server.Data;
 using Aegis.Server.Extensions;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -15,30 +18,41 @@ public class Startup(IConfiguration configuration)
 {
     public void ConfigureServices(IServiceCollection services)
     {
-        // 1. Configure Logging
         Log.Logger = new LoggerConfiguration()
             .ReadFrom.Configuration(configuration)
             .Enrich.FromLogContext()
             .CreateLogger();
 
-        // 2. Configure Database
+        services.AddRazorComponents()
+            .AddInteractiveServerComponents();
+
+        services.AddCascadingAuthenticationState();
+        services.AddHttpContextAccessor();
+        services.AddScoped<AuthenticationStateProvider, HttpContextAuthenticationStateProvider>();
+
+        services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+            .AddCookie(options =>
+            {
+                options.LoginPath = "/login";
+                options.LogoutPath = "/logout";
+                options.AccessDeniedPath = "/login";
+            });
+        services.AddAuthorization();
+
         services.AddControllers();
         services.AddDbContext<AegisDbContext, ApplicationDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+            options.UseSqlite(configuration.GetConnectionString("DefaultConnection")));
 
-        // 3. Configure Filters
         services.AddMvc(options => { options.Filters.Add<ApiExceptionFilter>(); });
 
-        // 4. Configure Settings
         services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
 
-        // 5. Register Services
         services.AddScoped<AuthService>();
+        services.AddScoped<CookieSignInService>();
+        services.AddScoped<DbSeeder>();
         services.AddAegisServer();
         services.AddMemoryCache();
         services.AddSerilog();
-
-        // 6. Configure Swagger
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen();
     }
@@ -51,12 +65,28 @@ public class Startup(IConfiguration configuration)
             app.UseSwaggerUI();
         }
 
+        using (var scope = app.ApplicationServices.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.Database.Migrate();
+
+            var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
+            seeder.SeedAsync().GetAwaiter().GetResult();
+        }
+
         app.UseHttpsRedirection()
+            .UseStaticFiles()
             .UseSerilogRequestLogging()
             .UseRouting()
             .UseAuthentication()
             .UseAuthorization()
-            .UseEndpoints(endpoints => { endpoints.MapControllers(); })
+            .UseAntiforgery()
+            .UseEndpoints(endpoints =>
+            {
+                endpoints.MapControllers();
+                endpoints.MapRazorComponents<App>()
+                    .AddInteractiveServerRenderMode();
+            })
             .UseExceptionHandler(appError =>
             {
                 appError.Run(async context =>
@@ -68,11 +98,9 @@ public class Startup(IConfiguration configuration)
                     if (contextFeature != null)
                     {
                         var error = new { message = contextFeature.Error.Message };
-                        await context.Response.WriteAsync(JsonSerializer.Serialize(error));
+                        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(error));
 
-                        // Logging
                         Log.Error(contextFeature.Error, "An unhandled exception occurred.");
-                        Console.WriteLine($"Stack Trace: {contextFeature.Error.StackTrace}");
                     }
                 });
             });

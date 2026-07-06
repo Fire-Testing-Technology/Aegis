@@ -1,0 +1,284 @@
+@page "/products"
+@attribute [Authorize(Roles = "Admin")]
+@using Aegis.Server.AspNetCore.Data.Context
+@using Aegis.Server.AspNetCore.Utilities
+@using Aegis.Server.Entities
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+
+<PageTitle>Products</PageTitle>
+
+<h1 class="mb-4">Products &amp; features</h1>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header">Add product</div>
+            <div class="card-body">
+                <EditForm Model="NewProduct" OnValidSubmit="AddProductAsync" FormName="add-product" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">Product name</label>
+                        <InputText class="form-control" @bind-Value="NewProduct.Name" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Software URN</label>
+                        <InputText class="form-control" @bind-Value="NewProduct.SoftwareUrn"
+                                   placeholder="urn:ftt:software:conecalc:7" />
+                        <div class="form-text">Format: urn:ftt:software:&lt;slug&gt;:&lt;major-version&gt;</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add product</button>
+                </EditForm>
+            </div>
+        </div>
+
+        @if (_selectedProduct != null)
+        {
+            <div class="card shadow-sm mt-3">
+                <div class="card-header">Add feature to @_selectedProduct.ProductName</div>
+                <div class="card-body">
+                    <EditForm Model="NewFeature" OnValidSubmit="AddFeatureAsync" FormName="add-feature" method="post">
+                        <input type="hidden" name="ProductId" value="@_selectedProductId" />
+                        <div class="mb-3">
+                            <label class="form-label">Feature name</label>
+                            <InputText class="form-control" @bind-Value="NewFeature.Name" />
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add feature</button>
+                    </EditForm>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="col-lg-7">
+        @if (_products.Count == 0)
+        {
+            <div class="alert alert-secondary">No products yet. Add a product to start defining features.</div>
+        }
+        else
+        {
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <label class="form-label fw-semibold">Product</label>
+                    <InputSelect class="form-select" @bind-Value="_selectedProductId" @bind-Value:after="OnProductChangedAsync">
+                        @foreach (var product in _products)
+                        {
+                            <option value="@product.ProductId">@product.ProductName</option>
+                        }
+                    </InputSelect>
+                    @if (_selectedProduct != null)
+                    {
+                        <p class="text-muted small mb-0 mt-2">
+                            Software URN: <code>@_selectedProduct.SoftwareUrn</code>
+                        </p>
+                    }
+                </div>
+            </div>
+
+            @if (_selectedProduct != null)
+            {
+                <div class="card shadow-sm">
+                    <div class="card-header fw-semibold">Features for @_selectedProduct.ProductName</div>
+                    <ul class="list-group list-group-flush">
+                        @foreach (var feature in _features)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>@feature.FeatureName</span>
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-danger"
+                                        disabled="@_busy"
+                                        @onclick="() => RemoveFeatureAsync(feature.FeatureId)">
+                                    Remove
+                                </button>
+                            </li>
+                        }
+                        @if (_features.Count == 0)
+                        {
+                            <li class="list-group-item text-muted">No features for this product.</li>
+                        }
+                    </ul>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-info") mt-3">@_message</div>
+}
+
+@code {
+    [SupplyParameterFromForm(FormName = "add-product")]
+    private NewProductModel NewProduct { get; set; } = new();
+
+    [SupplyParameterFromForm(FormName = "add-feature")]
+    private NewFeatureModel NewFeature { get; set; } = new();
+
+    private List<Product> _products = [];
+    private List<Feature> _features = [];
+    private Guid _selectedProductId;
+    private Product? _selectedProduct;
+    private string? _message;
+    private bool _isError;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task OnProductChangedAsync() => await LoadFeaturesAsync();
+
+    private async Task LoadAsync()
+    {
+        _products = await Db.Products.OrderBy(p => p.ProductName).ToListAsync();
+
+        if (_products.Count == 0)
+        {
+            _selectedProductId = Guid.Empty;
+            _selectedProduct = null;
+            _features = [];
+            return;
+        }
+
+        if (_selectedProductId == Guid.Empty || _products.All(p => p.ProductId != _selectedProductId))
+            _selectedProductId = _products[0].ProductId;
+
+        await LoadFeaturesAsync();
+    }
+
+    private async Task LoadFeaturesAsync()
+    {
+        _selectedProduct = _products.FirstOrDefault(p => p.ProductId == _selectedProductId);
+        if (_selectedProduct == null)
+        {
+            _features = [];
+            return;
+        }
+
+        _features = await Db.Features
+            .Where(f => f.ProductId == _selectedProductId)
+            .OrderBy(f => f.FeatureName)
+            .ToListAsync();
+
+        NewFeature.ProductId = _selectedProductId;
+    }
+
+    private async Task AddProductAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewProduct.Name)) return;
+
+        _isError = false;
+        var urn = SoftwareUrn.Normalize(NewProduct.SoftwareUrn);
+        if (!SoftwareUrn.IsValid(urn))
+        {
+            _isError = true;
+            _message = "Software URN must match urn:ftt:software:<slug>:<major-version> (lowercase slug).";
+            return;
+        }
+
+        if (await Db.Products.AnyAsync(p => p.SoftwareUrn == urn))
+        {
+            _isError = true;
+            _message = "That software URN is already in use.";
+            return;
+        }
+
+        var product = new Product
+        {
+            ProductName = NewProduct.Name.Trim(),
+            SoftwareUrn = urn
+        };
+        await Db.Products.AddAsync(product);
+        await Db.SaveChangesAsync();
+        NewProduct = new NewProductModel();
+        _message = "Product added.";
+        _selectedProductId = product.ProductId;
+        await LoadAsync();
+    }
+
+    private async Task AddFeatureAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewFeature.Name) || NewFeature.ProductId == Guid.Empty)
+            return;
+
+        _isError = false;
+        var name = NewFeature.Name.Trim();
+        if (await Db.Features.AnyAsync(f => f.ProductId == NewFeature.ProductId && f.FeatureName == name))
+        {
+            _isError = true;
+            _message = "That feature already exists for this product.";
+            return;
+        }
+
+        await Db.Features.AddAsync(new Feature
+        {
+            FeatureName = name,
+            ProductId = NewFeature.ProductId
+        });
+        await Db.SaveChangesAsync();
+
+        NewFeature = new NewFeatureModel { ProductId = NewFeature.ProductId };
+        _message = "Feature added.";
+        await LoadFeaturesAsync();
+    }
+
+    private async Task RemoveFeatureAsync(Guid featureId)
+    {
+        _busy = true;
+        _isError = false;
+        _message = null;
+
+        try
+        {
+            var feature = await Db.Features.AsNoTracking()
+                .FirstOrDefaultAsync(f => f.FeatureId == featureId);
+            if (feature == null)
+            {
+                _isError = true;
+                _message = "Feature not found.";
+                return;
+            }
+
+            if (feature.ProductId != _selectedProductId)
+            {
+                _isError = true;
+                _message = "Feature does not belong to the selected product.";
+                return;
+            }
+
+            var licenseLinks = await Db.LicenseFeatures.CountAsync(lf => lf.FeatureId == featureId);
+            var links = await Db.LicenseFeatures.Where(lf => lf.FeatureId == featureId).ToListAsync();
+            Db.LicenseFeatures.RemoveRange(links);
+
+            var entity = await Db.Features.FindAsync(featureId);
+            if (entity != null)
+                Db.Features.Remove(entity);
+
+            await Db.SaveChangesAsync();
+
+            _message = licenseLinks > 0
+                ? $"Feature '{feature.FeatureName}' removed (unlinked from {licenseLinks} license(s))."
+                : $"Feature '{feature.FeatureName}' removed.";
+            await LoadFeaturesAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = $"Could not remove feature: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class NewProductModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string SoftwareUrn { get; set; } = string.Empty;
+    }
+
+    private sealed class NewFeatureModel
+    {
+        public Guid ProductId { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+}

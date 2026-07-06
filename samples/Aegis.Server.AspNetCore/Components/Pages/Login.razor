@@ -1,0 +1,71 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@using Aegis.Server.AspNetCore.DTOs
+@using Aegis.Server.AspNetCore.Services
+@using Microsoft.AspNetCore.Components
+@inject CookieSignInService SignInService
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Sign in</PageTitle>
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card shadow">
+            <div class="card-body p-4">
+                <h2 class="mb-4">Sign in</h2>
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <div class="alert alert-danger">@_error</div>
+                }
+                <EditForm Model="Input" OnValidSubmit="HandleLoginAsync" FormName="login" method="post">
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <InputText class="form-control" @bind-Value="Input.Username" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <InputText type="password" class="form-control" @bind-Value="Input.Password" />
+                    </div>
+                    <button class="btn btn-primary w-100" type="submit" disabled="@_busy">
+                        @(_busy ? "Signing in..." : "Sign in")
+                    </button>
+                </EditForm>
+                <p class="text-muted small mt-3 mb-0">
+                    Default dev account: <code>admin</code> / <code>Admin123!</code>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm(FormName = "login")]
+    private LoginDto Input { get; set; } = new();
+
+    private string? _error;
+    private bool _busy;
+
+    private async Task HandleLoginAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext == null)
+        {
+            _error = "HTTP context is not available.";
+            _busy = false;
+            return;
+        }
+
+        var success = await SignInService.SignInAsync(httpContext, Input);
+        if (success)
+            Navigation.NavigateTo("/", forceLoad: true);
+        else
+            _error = "Invalid username or password.";
+
+        _busy = false;
+    }
+}

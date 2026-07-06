@@ -1,0 +1,227 @@
+@page "/licenses/generate"
+@attribute [Authorize(Roles = "Admin")]
+@using System.Security.Claims
+@using Aegis.Models
+@using Aegis.Server.AspNetCore.Data.Context
+@using Aegis.Server.DTOs
+@using Aegis.Server.Entities
+@using Aegis.Server.Services
+@using Microsoft.EntityFrameworkCore
+@inject LicenseService LicenseService
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime Js
+
+<PageTitle>Generate license</PageTitle>
+
+<h1 class="mb-4">Generate license</h1>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@if (_generatedBytes != null)
+{
+    <div class="alert alert-success">
+        <strong>License created.</strong> Key: <code>@_generatedKey</code>
+        <div class="mt-2">
+            <button class="btn btn-sm btn-primary me-2" @onclick="DownloadGeneratedAsync">Download .bin</button>
+            <button class="btn btn-sm btn-secondary" @onclick="CopyGeneratedBase64Async">Copy Base64</button>
+        </div>
+    </div>
+}
+
+<EditForm Model="_request" OnValidSubmit="HandleGenerateAsync" FormName="generate-license" class="card shadow-sm">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Product</label>
+                <InputSelect class="form-select" @bind-Value="_request.ProductId" @bind-Value:after="LoadFeaturesAsync">
+                    @foreach (var product in _products)
+                    {
+                        <option value="@product.ProductId">@product.ProductName</option>
+                    }
+                </InputSelect>
+                @if (!string.IsNullOrEmpty(_selectedSoftwareUrn))
+                {
+                    <div class="form-text">Software URN: <code>@_selectedSoftwareUrn</code></div>
+                }
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">License type</label>
+                <InputSelect class="form-select" @bind-Value="_request.LicenseType" @bind-Value:after="OnLicenseTypeChanged">
+                    @foreach (var type in Enum.GetValues<LicenseType>())
+                    {
+                        <option value="@type">@type</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Issued to</label>
+                <InputText class="form-control" @bind-Value="_request.IssuedTo" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Expiration date (optional)</label>
+                <InputDate class="form-control" @bind-Value="_expirationDate" />
+            </div>
+            @if (_request.LicenseType is LicenseType.Concurrent or LicenseType.Floating)
+            {
+                <div class="col-md-6">
+                    <label class="form-label">Max active users</label>
+                    <InputNumber class="form-control" @bind-Value="_request.MaxActiveUsersCount" />
+                </div>
+            }
+            @if (_request.LicenseType == LicenseType.NodeLocked)
+            {
+                <div class="col-md-6">
+                    <label class="form-label">Hardware ID</label>
+                    <InputText class="form-control" @bind-Value="_request.HardwareId" />
+                </div>
+            }
+            @if (_request.LicenseType == LicenseType.Subscription)
+            {
+                <div class="col-md-6">
+                    <label class="form-label">Subscription duration (days)</label>
+                    <InputNumber class="form-control" @bind-Value="_subscriptionDays" />
+                </div>
+            }
+        </div>
+
+        @if (_productFeatures.Count > 0)
+        {
+            <h5 class="mt-4">Features</h5>
+            <div class="row g-2">
+                @foreach (var feature in _productFeatures)
+                {
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox"
+                                   checked="@IsFeatureSelected(feature.FeatureId)"
+                                   @onchange="e => ToggleFeature(feature.FeatureId, (bool)e.Value!)" />
+                            <label class="form-check-label">@feature.FeatureName</label>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        <button type="submit" class="btn btn-primary mt-4" disabled="@_busy">
+            @(_busy ? "Generating..." : "Generate license")
+        </button>
+    </div>
+</EditForm>
+
+@code {
+    private readonly LicenseGenerationRequest _request = new()
+    {
+        LicenseType = LicenseType.Standard,
+        IssuedTo = string.Empty
+    };
+
+    private List<Product> _products = [];
+    private List<Aegis.Server.Entities.Feature> _productFeatures = [];
+    private string? _selectedSoftwareUrn;
+    private DateTime? _expirationDate;
+    private int? _subscriptionDays = 365;
+    private byte[]? _generatedBytes;
+    private string? _generatedKey;
+    private string? _error;
+    private bool _busy;
+    private readonly HashSet<Guid> _selectedFeatures = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _products = await Db.Products.OrderBy(p => p.ProductName).ToListAsync();
+        if (_products.Count > 0)
+        {
+            _request.ProductId = _products[0].ProductId;
+            await LoadFeaturesAsync();
+        }
+    }
+
+    private async Task LoadFeaturesAsync()
+    {
+        if (_request.ProductId == Guid.Empty)
+        {
+            _productFeatures = [];
+            _selectedFeatures.Clear();
+            return;
+        }
+
+        _productFeatures = await Db.Features
+            .Where(f => f.ProductId == _request.ProductId)
+            .OrderBy(f => f.FeatureName)
+            .ToListAsync();
+
+        _selectedSoftwareUrn = _products
+            .FirstOrDefault(p => p.ProductId == _request.ProductId)?.SoftwareUrn;
+
+        _selectedFeatures.Clear();
+        foreach (var f in _productFeatures)
+            _selectedFeatures.Add(f.FeatureId);
+    }
+
+    private async Task OnLicenseTypeChanged() => await Task.CompletedTask;
+
+    private bool IsFeatureSelected(Guid featureId) => _selectedFeatures.Contains(featureId);
+
+    private void ToggleFeature(Guid featureId, bool enabled)
+    {
+        if (enabled)
+            _selectedFeatures.Add(featureId);
+        else
+            _selectedFeatures.Remove(featureId);
+    }
+
+    private async Task HandleGenerateAsync()
+    {
+        _busy = true;
+        _error = null;
+        _generatedBytes = null;
+
+        try
+        {
+            var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+            var userId = auth.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (Guid.TryParse(userId, out var id))
+                _request.IssuingUserId = id;
+
+            _request.ExpirationDate = _expirationDate?.ToUniversalTime();
+            if (_request.LicenseType == LicenseType.Subscription && _subscriptionDays is > 0)
+                _request.SubscriptionDuration = TimeSpan.FromDays(_subscriptionDays.Value);
+
+            _request.Features = _selectedFeatures.ToDictionary(
+                id => id,
+                _ => Aegis.Models.Feature.FromBool(true));
+
+            _generatedBytes = await LicenseService.GenerateLicenseAsync(_request);
+
+            var created = await Db.Licenses
+                .OrderByDescending(l => l.IssuedOn)
+                .FirstAsync();
+            _generatedKey = created.LicenseKey;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DownloadGeneratedAsync()
+    {
+        if (_generatedBytes == null) return;
+        var base64 = Convert.ToBase64String(_generatedBytes);
+        await Js.InvokeVoidAsync("aegisDownloadFile", "license.bin", base64);
+    }
+
+    private async Task CopyGeneratedBase64Async()
+    {
+        if (_generatedBytes == null) return;
+        await Js.InvokeVoidAsync("navigator.clipboard.writeText", Convert.ToBase64String(_generatedBytes));
+    }
+}

@@ -1,0 +1,49 @@
+@page "/"
+@attribute [Authorize(Roles = "Admin,User")]
+@using Aegis.Server.AspNetCore.Data.Context
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+
+<PageTitle>Dashboard</PageTitle>
+
+<h1 class="mb-4">Dashboard</h1>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Products</h5>
+                <p class="display-6 mb-0">@_productCount</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Licenses</h5>
+                <p class="display-6 mb-0">@_licenseCount</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Active licenses</h5>
+                <p class="display-6 mb-0">@_activeLicenseCount</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int _productCount;
+    private int _licenseCount;
+    private int _activeLicenseCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _productCount = await Db.Products.CountAsync();
+        _licenseCount = await Db.Licenses.CountAsync();
+        _activeLicenseCount = await Db.Licenses.CountAsync(l => l.Status == LicenseStatus.Valid);
+    }
+}

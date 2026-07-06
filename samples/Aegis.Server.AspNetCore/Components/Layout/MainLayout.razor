@@ -1,0 +1,21 @@
+@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+    <main>
+        <div class="top-row px-4 d-flex justify-content-between align-items-center">
+            <span class="text-muted">FTT License Management</span>
+            <AuthorizeView>
+                <Authorized>
+                    <span class="me-3">@context.User.Identity?.Name</span>
+                    <a class="btn btn-sm btn-outline-secondary" href="/logout">Sign out</a>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+        <article class="content px-4 py-3">
+            @Body
+        </article>
+    </main>
+</div>

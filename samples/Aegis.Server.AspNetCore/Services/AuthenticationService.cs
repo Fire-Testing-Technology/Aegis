@@ -18,6 +18,18 @@ namespace Aegis.Server.AspNetCore.Services;
 public class AuthService(ApplicationDbContext dbContext, IOptions<JwtSettings> options)
 {
     /// <summary>
+    ///     Validates credentials without issuing a JWT (for cookie-based UI sign-in).
+    /// </summary>
+    public async Task<User?> ValidateCredentialsAsync(LoginDto login)
+    {
+        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Username == login.Username);
+        if (user == null || !VerifyPassword(login.Password, user.PasswordHash))
+            return null;
+
+        return user;
+    }
+
+    /// <summary>
     ///     Authenticates a user and generates a JWT token if successful.
     /// </summary>
     /// <param name="login">The login credentials.</param>
@@ -51,7 +63,8 @@ public class AuthService(ApplicationDbContext dbContext, IOptions<JwtSettings> o
             Email = newUser.Email,
             PasswordHash = HashPassword(newUser.Password),
             Role = newUser.Role,
-            FullName = newUser.FullName
+            FullName = newUser.FullName,
+            ApiKey = Guid.NewGuid().ToString("N")
         };
 
         await dbContext.Users.AddAsync(user);

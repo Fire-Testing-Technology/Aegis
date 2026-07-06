@@ -83,10 +83,16 @@ public class LicensesControllerTests
     private void SeedDatabase()
     {
         // Add product and features
-        _dbContext.Products.Add(new Product { ProductId = Guid.NewGuid(), ProductName = "Test Product" });
-        _dbContext.Features.Add(new Feature { FeatureId = Guid.NewGuid(), FeatureName = "Feature 1" });
-        _dbContext.Features.Add(new Feature { FeatureId = Guid.NewGuid(), FeatureName = "Feature 2" });
-        _dbContext.Features.Add(new Feature { FeatureId = Guid.NewGuid(), FeatureName = "Feature 3" });
+        var product = new Product
+        {
+            ProductId = Guid.NewGuid(),
+            ProductName = "Test Product",
+            SoftwareUrn = "urn:ftt:software:test:1"
+        };
+        _dbContext.Products.Add(product);
+        _dbContext.Features.Add(new Feature { FeatureId = Guid.NewGuid(), FeatureName = "Feature 1", ProductId = product.ProductId });
+        _dbContext.Features.Add(new Feature { FeatureId = Guid.NewGuid(), FeatureName = "Feature 2", ProductId = product.ProductId });
+        _dbContext.Features.Add(new Feature { FeatureId = Guid.NewGuid(), FeatureName = "Feature 3", ProductId = product.ProductId });
         _dbContext.SaveChanges();
 
         // Link features to product
