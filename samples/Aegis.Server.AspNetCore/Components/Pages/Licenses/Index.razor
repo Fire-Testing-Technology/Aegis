@@ -4,6 +4,7 @@
 @using Aegis.Server.Entities
 @using Aegis.Server.Services
 @using Microsoft.EntityFrameworkCore
+@using System.Text
 @inject ApplicationDbContext Db
 @inject LicenseService LicenseService
 @inject IJSRuntime Js
@@ -12,9 +13,14 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="mb-0">Licenses</h1>
-    <AuthorizeView Roles="Admin">
-        <a class="btn btn-primary" href="licenses/generate">Generate license</a>
-    </AuthorizeView>
+    <div class="d-flex align-items-center gap-2">
+        <button type="button" class="btn btn-outline-secondary" @onclick="ExportCsvAsync">
+            Export CSV
+        </button>
+        <AuthorizeView Roles="Admin">
+            <a class="btn btn-primary" href="licenses/generate">Generate license</a>
+        </AuthorizeView>
+    </div>
 </div>
 
 @if (!string.IsNullOrEmpty(_message))
@@ -136,5 +142,76 @@ else
     private async Task<byte[]> RegenerateFileAsync(License license)
     {
         return await LicenseService.GetLicenseFileBytesAsync(license.LicenseId);
+    }
+
+    private async Task ExportCsvAsync()
+    {
+        try
+        {
+            // Ensure we export the latest data
+            await LoadAsync();
+
+            var csv = BuildLicensesCsv(_licenses);
+            var bytes = WithUtf8Bom(Encoding.UTF8.GetBytes(csv));
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"licenses-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv";
+            await Js.InvokeVoidAsync("aegisDownloadFile", fileName, base64);
+            _message = "Exported licenses to CSV.";
+        }
+        catch (Exception ex)
+        {
+            _message = $"CSV export failed: {ex.Message}";
+        }
+    }
+
+    private static string BuildLicensesCsv(IEnumerable<License> licenses)
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine(string.Join(',',
+            "LicenseKey",
+            "Product",
+            "SoftwareUrn",
+            "Type",
+            "IssuedTo",
+            "Issuer",
+            "Status",
+            "IssuedOnUtc",
+            "ExpiresUtc"));
+
+        foreach (var l in licenses)
+        {
+            sb.AppendLine(string.Join(',',
+                Csv(l.LicenseKey),
+                Csv(l.Product?.ProductName ?? string.Empty),
+                Csv(l.Product?.SoftwareUrn ?? string.Empty),
+                Csv(l.Type.ToString()),
+                Csv(l.IssuedTo ?? string.Empty),
+                Csv(l.Issuer ?? string.Empty),
+                Csv(l.Status.ToString()),
+                Csv(l.IssuedOn.ToUniversalTime().ToString("O")),
+                Csv(l.ExpirationDate?.ToUniversalTime().ToString("O") ?? string.Empty)));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string Csv(string value)
+    {
+        // RFC4180-ish: quote, and escape quotes by doubling
+        value ??= string.Empty;
+        var escaped = value.Replace("\"", "\"\"");
+        return $"\"{escaped}\"";
+    }
+
+    private static byte[] WithUtf8Bom(byte[] bytes)
+    {
+        var preamble = Encoding.UTF8.GetPreamble();
+        if (preamble.Length == 0) return bytes;
+
+        var withBom = new byte[preamble.Length + bytes.Length];
+        Buffer.BlockCopy(preamble, 0, withBom, 0, preamble.Length);
+        Buffer.BlockCopy(bytes, 0, withBom, preamble.Length, bytes.Length);
+        return withBom;
     }
 }
