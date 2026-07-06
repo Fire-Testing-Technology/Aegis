@@ -1,0 +1,151 @@
+@page "/users"
+@attribute [Authorize(Roles = "Admin")]
+@using Aegis.Server.AspNetCore.Data.Context
+@using Aegis.Server.AspNetCore.DTOs
+@using Aegis.Server.AspNetCore.Entities
+@using Aegis.Server.AspNetCore.Services
+@using Microsoft.AspNetCore.Components
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthService AuthService
+
+<PageTitle>Users</PageTitle>
+
+<h1 class="mb-4">Users</h1>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header">Add user</div>
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <div class="alert alert-danger">@_error</div>
+                }
+                <EditForm Model="NewUser" OnValidSubmit="AddUserAsync" FormName="add-user" method="post">
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <InputText class="form-control" @bind-Value="NewUser.Username" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Full name</label>
+                        <InputText class="form-control" @bind-Value="NewUser.FullName" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <InputText class="form-control" @bind-Value="NewUser.Email" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <InputSelect class="form-select" @bind-Value="NewUser.Role">
+                            @foreach (var role in _roles)
+                            {
+                                <option value="@role.Name">@role.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <InputText type="password" class="form-control" @bind-Value="NewUser.Password" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirm password</label>
+                        <InputText type="password" class="form-control" @bind-Value="NewUser.ConfirmPassword" />
+                    </div>
+                    <button type="submit" class="btn btn-primary" disabled="@_busy">
+                        @(_busy ? "Adding..." : "Add user")
+                    </button>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        @if (_users.Count == 0)
+        {
+            <div class="alert alert-secondary">No users yet.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Full name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in _users)
+                        {
+                            <tr>
+                                <td>@user.Username</td>
+                                <td>@user.FullName</td>
+                                <td>@user.Email</td>
+                                <td><span class="badge text-bg-secondary">@user.Role</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert alert-success mt-3">@_message</div>
+}
+
+@code {
+    [SupplyParameterFromForm(FormName = "add-user")]
+    private RegisterDto NewUser { get; set; } = new() { Role = "User" };
+
+    private List<User> _users = [];
+    private List<Role> _roles = [];
+    private string? _message;
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _users = await Db.Users.AsNoTracking().OrderBy(u => u.Username).ToListAsync();
+        _roles = await Db.Roles.AsNoTracking().OrderBy(r => r.Name).ToListAsync();
+
+        if (_roles.Count > 0 && string.IsNullOrEmpty(NewUser.Role))
+            NewUser.Role = _roles[0].Name;
+    }
+
+    private async Task AddUserAsync()
+    {
+        _busy = true;
+        _error = null;
+        _message = null;
+
+        if (NewUser.Password != NewUser.ConfirmPassword)
+        {
+            _error = "Passwords do not match.";
+            _busy = false;
+            return;
+        }
+
+        var success = await AuthService.RegisterAsync(NewUser);
+        if (success)
+        {
+            _message = $"User '{NewUser.Username}' created.";
+            NewUser = new RegisterDto { Role = _roles.FirstOrDefault()?.Name ?? "User" };
+            await LoadAsync();
+        }
+        else
+        {
+            _error = "Could not create user. The username or email may already be in use, or the role is invalid.";
+        }
+
+        _busy = false;
+    }
+}

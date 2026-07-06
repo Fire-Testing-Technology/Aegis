@@ -3,6 +3,7 @@ using System;
 using Aegis.Server.AspNetCore.Data.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Aegis.Server.AspNetCore.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260706095042_Initial")]
+    partial class Initial
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.7");
@@ -145,12 +148,7 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid>("ProductId")
-                        .HasColumnType("TEXT");
-
                     b.HasKey("FeatureId");
-
-                    b.HasIndex("ProductId");
 
                     b.ToTable("Features");
                 });
@@ -251,17 +249,10 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("SoftwareUrn")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.Property<Guid?>("UserId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("ProductId");
-
-                    b.HasIndex("SoftwareUrn")
-                        .IsUnique();
 
                     b.HasIndex("UserId");
 
@@ -295,17 +286,6 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("License");
-                });
-
-            modelBuilder.Entity("Aegis.Server.Entities.Feature", b =>
-                {
-                    b.HasOne("Aegis.Server.Entities.Product", "Product")
-                        .WithMany("Features")
-                        .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("Aegis.Server.Entities.License", b =>
@@ -388,8 +368,6 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
 
             modelBuilder.Entity("Aegis.Server.Entities.Product", b =>
                 {
-                    b.Navigation("Features");
-
                     b.Navigation("LicenseFeatures");
 
                     b.Navigation("Licenses");

@@ -1,0 +1,232 @@
+@page "/licenses/{LicenseId:guid}"
+@attribute [Authorize(Roles = "Admin,User")]
+@using Aegis.Server.AspNetCore.Data.Context
+@using Aegis.Server.Entities
+@using Aegis.Server.Services
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject LicenseService LicenseService
+@inject IJSRuntime Js
+
+<PageTitle>View license</PageTitle>
+
+@if (_loading)
+{
+    <div class="text-muted">Loading license...</div>
+}
+else if (_license == null)
+{
+    <div class="alert alert-warning">License not found.</div>
+    <a class="btn btn-outline-secondary" href="licenses">Back to licenses</a>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-1">License details</h1>
+            <div class="text-muted small">License key</div>
+            <code class="small">@_license.LicenseKey</code>
+        </div>
+        <div class="text-nowrap">
+            <a class="btn btn-outline-secondary me-2" href="licenses">Back</a>
+            <button class="btn btn-outline-primary me-1" @onclick="DownloadAsync">Download</button>
+            <button class="btn btn-outline-secondary" @onclick="CopyBase64Async">Copy Base64</button>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header fw-semibold">Summary</div>
+                <dl class="card-body row mb-0">
+                    <dt class="col-sm-4">Status</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge @StatusBadgeClass(_license.Status)">@_license.Status</span>
+                    </dd>
+
+                    <dt class="col-sm-4">Product</dt>
+                    <dd class="col-sm-8">@_license.Product?.ProductName</dd>
+
+                    <dt class="col-sm-4">Software URN</dt>
+                    <dd class="col-sm-8"><code>@(_license.Product?.SoftwareUrn ?? "—")</code></dd>
+
+                    <dt class="col-sm-4">Type</dt>
+                    <dd class="col-sm-8">@_license.Type</dd>
+
+                    <dt class="col-sm-4">Issued to</dt>
+                    <dd class="col-sm-8">@_license.IssuedTo</dd>
+
+                    <dt class="col-sm-4">Issuer</dt>
+                    <dd class="col-sm-8">@(_license.Issuer ?? "—")</dd>
+
+                    <dt class="col-sm-4">Issued on</dt>
+                    <dd class="col-sm-8">@_license.IssuedOn.ToString("yyyy-MM-dd HH:mm") UTC</dd>
+
+                    <dt class="col-sm-4">Expires</dt>
+                    <dd class="col-sm-8">@FormatDate(_license.ExpirationDate)</dd>
+
+                    @if (_license.Type == LicenseType.Subscription)
+                    {
+                        <dt class="col-sm-4">Subscription expires</dt>
+                        <dd class="col-sm-8">@FormatDate(_license.SubscriptionExpiryDate)</dd>
+                    }
+
+                    @if (_license.Type is LicenseType.NodeLocked)
+                    {
+                        <dt class="col-sm-4">Hardware ID</dt>
+                        <dd class="col-sm-8"><code>@(_license.HardwareId ?? "—")</code></dd>
+                    }
+
+                    @if (_license.Type is LicenseType.Concurrent or LicenseType.Floating)
+                    {
+                        <dt class="col-sm-4">Max active users</dt>
+                        <dd class="col-sm-8">@(_license.MaxActiveUsersCount?.ToString() ?? "—")</dd>
+
+                        <dt class="col-sm-4">Active users</dt>
+                        <dd class="col-sm-8">@(_license.ActiveUsersCount?.ToString() ?? "0")</dd>
+                    }
+                </dl>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header fw-semibold">Features</div>
+                @if (_features.Count == 0)
+                {
+                    <div class="card-body text-muted">No features assigned.</div>
+                }
+                else
+                {
+                    <ul class="list-group list-group-flush">
+                        @foreach (var feature in _features)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>@feature.Feature.FeatureName</span>
+                                <span class="badge @(feature.IsEnabled ? "text-bg-success" : "text-bg-secondary")">
+                                    @(feature.IsEnabled ? "Enabled" : "Disabled")
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header fw-semibold">Activations</div>
+                @if (_activations.Count == 0)
+                {
+                    <div class="card-body text-muted">No activations recorded.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Machine ID</th>
+                                    <th>Activated</th>
+                                    <th>Last heartbeat</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var activation in _activations)
+                                {
+                                    <tr>
+                                        <td><code class="small">@activation.MachineId</code></td>
+                                        <td>@activation.ActivationDate.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td>@activation.LastHeartbeat.ToString("yyyy-MM-dd HH:mm")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert alert-info mt-3">@_message</div>
+    }
+}
+
+@code {
+    [Parameter] public Guid LicenseId { get; set; }
+
+    private License? _license;
+    private List<LicenseFeature> _features = [];
+    private List<Activation> _activations = [];
+    private string? _message;
+    private bool _loading = true;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        _license = await Db.Licenses
+            .AsNoTracking()
+            .Include(l => l.Product)
+            .Include(l => l.LicenseFeatures).ThenInclude(lf => lf.Feature)
+            .Include(l => l.Activations)
+            .FirstOrDefaultAsync(l => l.LicenseId == LicenseId);
+
+        _features = _license?.LicenseFeatures
+            .OrderBy(lf => lf.Feature.FeatureName)
+            .ToList() ?? [];
+
+        _activations = _license?.Activations
+            .OrderByDescending(a => a.ActivationDate)
+            .ToList() ?? [];
+
+        _loading = false;
+    }
+
+    private static string StatusBadgeClass(LicenseStatus status) => status switch
+    {
+        LicenseStatus.Valid => "text-bg-success",
+        LicenseStatus.Expired => "text-bg-warning",
+        LicenseStatus.Revoked => "text-bg-danger",
+        _ => "text-bg-secondary"
+    };
+
+    private static string FormatDate(DateTime? value) =>
+        value.HasValue ? $"{value.Value:yyyy-MM-dd HH:mm} UTC" : "-";
+
+    private async Task DownloadAsync()
+    {
+        if (_license == null) return;
+
+        try
+        {
+            var bytes = await LicenseService.GetLicenseFileBytesAsync(_license.LicenseId);
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"{_license.Product?.ProductName?.Replace(' ', '-') ?? "license"}-{_license.LicenseKey[..8]}.bin";
+            await Js.InvokeVoidAsync("aegisDownloadFile", fileName, base64);
+            _message = "License file downloaded.";
+        }
+        catch (Exception ex)
+        {
+            _message = $"Download failed: {ex.Message}";
+        }
+    }
+
+    private async Task CopyBase64Async()
+    {
+        if (_license == null) return;
+
+        try
+        {
+            var bytes = await LicenseService.GetLicenseFileBytesAsync(_license.LicenseId);
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", Convert.ToBase64String(bytes));
+            _message = "License Base64 copied to clipboard.";
+        }
+        catch (Exception ex)
+        {
+            _message = $"Copy failed: {ex.Message}";
+        }
+    }
+}

@@ -15,8 +15,8 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                 name: "Features",
                 columns: table => new
                 {
-                    FeatureId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    FeatureName = table.Column<string>(type: "nvarchar(max)", nullable: false)
+                    FeatureId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FeatureName = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -27,9 +27,9 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                 name: "Roles",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Name = table.Column<string>(type: "nvarchar(max)", nullable: false)
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Name = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -40,15 +40,15 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                 name: "Users",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Username = table.Column<string>(type: "nvarchar(30)", maxLength: 30, nullable: false),
-                    FullName = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    Email = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    PasswordHash = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Role = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    ApiKey = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    RefreshTokenId = table.Column<int>(type: "int", nullable: false),
-                    RoleId = table.Column<int>(type: "int", nullable: true)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Username = table.Column<string>(type: "TEXT", maxLength: 30, nullable: false),
+                    FullName = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
+                    Email = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
+                    PasswordHash = table.Column<string>(type: "TEXT", nullable: false),
+                    Role = table.Column<string>(type: "TEXT", nullable: false),
+                    ApiKey = table.Column<string>(type: "TEXT", nullable: false),
+                    RefreshTokenId = table.Column<int>(type: "INTEGER", nullable: false),
+                    RoleId = table.Column<int>(type: "INTEGER", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -64,9 +64,9 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                 name: "Products",
                 columns: table => new
                 {
-                    ProductId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    ProductName = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    ProductId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    ProductName = table.Column<string>(type: "TEXT", nullable: false),
+                    UserId = table.Column<Guid>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -82,12 +82,12 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                 name: "RefreshTokens",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Token = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Expires = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    Role = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Token = table.Column<string>(type: "TEXT", nullable: false),
+                    Expires = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    Role = table.Column<string>(type: "TEXT", nullable: false),
+                    UserId = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -104,20 +104,20 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                 name: "Licenses",
                 columns: table => new
                 {
-                    LicenseId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    LicenseKey = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Type = table.Column<int>(type: "int", nullable: false),
-                    IssuedOn = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    ExpirationDate = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    Issuer = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Status = table.Column<int>(type: "int", nullable: false),
-                    IssuedTo = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    MaxActiveUsersCount = table.Column<int>(type: "int", nullable: true),
-                    ActiveUsersCount = table.Column<int>(type: "int", nullable: true),
-                    HardwareId = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    SubscriptionExpiryDate = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    ProductId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                    LicenseId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    LicenseKey = table.Column<string>(type: "TEXT", nullable: false),
+                    Type = table.Column<int>(type: "INTEGER", nullable: false),
+                    IssuedOn = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    ExpirationDate = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    Issuer = table.Column<string>(type: "TEXT", nullable: false),
+                    Status = table.Column<int>(type: "INTEGER", nullable: false),
+                    IssuedTo = table.Column<string>(type: "TEXT", nullable: false),
+                    MaxActiveUsersCount = table.Column<int>(type: "INTEGER", nullable: true),
+                    ActiveUsersCount = table.Column<int>(type: "INTEGER", nullable: true),
+                    HardwareId = table.Column<string>(type: "TEXT", nullable: true),
+                    SubscriptionExpiryDate = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    ProductId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    UserId = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -140,12 +140,12 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                 name: "Activations",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    MachineId = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    ActivationDate = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    LastHeartbeat = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    LicenseId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    MachineId = table.Column<string>(type: "TEXT", nullable: false),
+                    ActivationDate = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    LastHeartbeat = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    LicenseId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    UserId = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -162,10 +162,12 @@ namespace Aegis.Server.AspNetCore.Data.Migrations
                 name: "LicenseFeatures",
                 columns: table => new
                 {
-                    ProductId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    FeatureId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    IsEnabled = table.Column<bool>(type: "bit", nullable: false),
-                    LicenseId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                    ProductId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FeatureId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    IsEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    Type = table.Column<int>(type: "INTEGER", nullable: false),
+                    Data = table.Column<byte[]>(type: "BLOB", nullable: true),
+                    LicenseId = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {

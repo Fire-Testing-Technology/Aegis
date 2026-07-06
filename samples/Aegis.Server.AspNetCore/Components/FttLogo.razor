@@ -1,0 +1,16 @@
+<a href="/" class="ftt-logo-link" aria-label="Fire Testing Technology home">
+    <img src="images/ftt_full_logo.png"
+         alt="Fire Testing Technology"
+         class="ftt-logo @SizeClass" />
+</a>
+
+@code {
+    [Parameter]
+    public string Size { get; set; } = "header";
+
+    private string SizeClass => Size switch
+    {
+        "sidebar" => "ftt-logo--sidebar",
+        _ => "ftt-logo--header"
+    };
+}

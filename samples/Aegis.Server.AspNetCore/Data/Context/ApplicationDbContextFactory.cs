@@ -24,7 +24,7 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
 
         // Create and return the DbContext instance
         var builder = new DbContextOptionsBuilder<ApplicationDbContext>();
-        builder.UseSqlServer(connectionString);
+        builder.UseSqlite(connectionString);
         return new ApplicationDbContext(builder.Options);
     }
 }

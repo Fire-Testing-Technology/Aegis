@@ -1,5 +1,6 @@
 ﻿using Aegis.Server.AspNetCore.Entities;
 using Aegis.Server.Data;
+using Aegis.Server.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aegis.Server.AspNetCore.Data.Context;
@@ -27,6 +28,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .WithOne()
             .HasForeignKey(l => l.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Product>()
+            .HasIndex(p => p.SoftwareUrn)
+            .IsUnique();
 
         base.OnModelCreating(modelBuilder);
     }

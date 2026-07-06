@@ -4,3 +4,8 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 /.idea
+.vs/
+*.user
+logs/
+aegis.db
+aegis.db-*

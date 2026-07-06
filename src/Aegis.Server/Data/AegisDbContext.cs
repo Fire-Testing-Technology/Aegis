@@ -59,5 +59,12 @@ public class AegisDbContext(DbContextOptions options) : DbContext(options)
             .HasOne(a => a.License)
             .WithMany(l => l.Activations)
             .HasForeignKey(a => a.LicenseId);
+
+        // Feature - Product (Many-to-One)
+        modelBuilder.Entity<Feature>()
+            .HasOne(f => f.Product)
+            .WithMany(p => p.Features)
+            .HasForeignKey(f => f.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

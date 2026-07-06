@@ -1,0 +1,21 @@
+<div class="nav-scrollable">
+    <nav class="nav flex-column p-3">
+        <div class="sidebar-brand mb-3">
+            <FttLogo Size="sidebar" />
+        </div>
+        <AuthorizeView Roles="Admin,User">
+            <Authorized>
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Dashboard</NavLink>
+                <NavLink class="nav-link" href="licenses">Licenses</NavLink>
+                <NavLink class="nav-link" href="swagger" target="_blank">API (Swagger)</NavLink>
+            </Authorized>
+        </AuthorizeView>
+        <AuthorizeView Roles="Admin">
+            <Authorized>
+                <NavLink class="nav-link" href="licenses/generate">Generate license</NavLink>
+                <NavLink class="nav-link" href="products">Products</NavLink>
+                <NavLink class="nav-link" href="users">Users</NavLink>
+            </Authorized>
+        </AuthorizeView>
+    </nav>
+</div>
