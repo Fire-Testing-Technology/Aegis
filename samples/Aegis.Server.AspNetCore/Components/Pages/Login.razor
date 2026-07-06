@@ -13,7 +13,10 @@
     <div class="col-md-5">
         <div class="card shadow">
             <div class="card-body p-4">
-                <h2 class="mb-4">Sign in</h2>
+                <div class="text-center mb-4">
+                    <FttLogo Size="sidebar" />
+                </div>
+                <h2 class="mb-4 text-center">Sign in</h2>
                 @if (!string.IsNullOrEmpty(_error))
                 {
                     <div class="alert alert-danger">@_error</div>

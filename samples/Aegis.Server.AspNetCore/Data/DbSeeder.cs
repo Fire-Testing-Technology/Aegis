@@ -14,13 +14,8 @@ public class DbSeeder(
     IConfiguration configuration,
     ILogger<DbSeeder> logger)
 {
-    private static readonly Dictionary<string, string> KnownSoftwareUrns = new()
-    {
-        ["ConeCalc 7"] = SoftwareUrn.Format("conecalc", 7),
-        ["SBICalc 3"] = SoftwareUrn.Format("sbicalc", 3),
-        ["CableSoft 3"] = SoftwareUrn.Format("cablesoft", 3),
-        ["IMOSoft 3"] = SoftwareUrn.Format("imosoft", 3)
-    };
+    private static readonly Dictionary<string, string> KnownSoftwareUrns =
+        FttProductCatalog.All.ToDictionary(e => e.Name, e => e.SoftwareUrn);
 
     public async Task SeedAsync()
     {
@@ -92,26 +87,17 @@ public class DbSeeder(
         if (await dbContext.Products.AnyAsync())
             return;
 
-        var productFeatures = new Dictionary<string, string[]>
+        foreach (var entry in FttProductCatalog.All)
         {
-            ["ConeCalc 7"] = ["Test", "HeatFlux", "CFactor", "PrintReport"],
-            ["SBICalc 3"] = ["Test", "Reports"],
-            ["CableSoft 3"] = ["Core"],
-            ["IMOSoft 3"] = ["Core"]
-        };
-
-        foreach (var (productName, featureNames) in productFeatures)
-        {
-            KnownSoftwareUrns.TryGetValue(productName, out var softwareUrn);
             var product = new Product
             {
-                ProductName = productName,
-                SoftwareUrn = softwareUrn ?? string.Empty
+                ProductName = entry.Name,
+                SoftwareUrn = entry.SoftwareUrn
             };
             await dbContext.Products.AddAsync(product);
             await dbContext.SaveChangesAsync();
 
-            foreach (var featureName in featureNames)
+            foreach (var featureName in entry.DefaultFeatures)
             {
                 if (!await dbContext.Features.AnyAsync(f =>
                         f.ProductId == product.ProductId && f.FeatureName == featureName))

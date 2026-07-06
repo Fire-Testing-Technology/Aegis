@@ -1,0 +1,40 @@
+@inject IJSRuntime Js
+@rendermode InteractiveServer
+
+<div class="theme-toggle" role="group" aria-label="Colour theme">
+    <button type="button"
+            class="theme-toggle-btn @(_theme == "light" ? "active" : null)"
+            title="Light theme"
+            @onclick="SetLightThemeAsync">
+        Light
+    </button>
+    <button type="button"
+            class="theme-toggle-btn @(_theme == "dark" ? "active" : null)"
+            title="Dark theme"
+            @onclick="SetDarkThemeAsync">
+        Dark
+    </button>
+</div>
+
+@code {
+    private string _theme = "dark";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _theme = await Js.InvokeAsync<string>("aegisGetTheme");
+            StateHasChanged();
+        }
+    }
+
+    private Task SetLightThemeAsync() => SetThemeAsync("light");
+
+    private Task SetDarkThemeAsync() => SetThemeAsync("dark");
+
+    private async Task SetThemeAsync(string theme)
+    {
+        _theme = theme;
+        await Js.InvokeVoidAsync("aegisSetTheme", theme);
+    }
+}

@@ -16,4 +16,26 @@ public static partial class SoftwareUrn
 
     public static string Format(string slug, int majorVersion) =>
         $"{Prefix}{slug.Trim().ToLowerInvariant()}:{majorVersion}";
+
+    public static string SlugFromName(string name) =>
+        new string(name.Trim().ToLowerInvariant()
+            .Where(c => char.IsAsciiLetterOrDigit(c) || c == '-')
+            .ToArray());
+
+    public static string BuildDisplayName(string name, int majorVersion) =>
+        $"{name.Trim()} {majorVersion}";
+
+    public static bool TryCreate(string name, int majorVersion, out string urn)
+    {
+        urn = string.Empty;
+        if (majorVersion < 1 || string.IsNullOrWhiteSpace(name))
+            return false;
+
+        var slug = SlugFromName(name);
+        if (slug.Length == 0)
+            return false;
+
+        urn = Format(slug, majorVersion);
+        return IsValid(urn);
+    }
 }

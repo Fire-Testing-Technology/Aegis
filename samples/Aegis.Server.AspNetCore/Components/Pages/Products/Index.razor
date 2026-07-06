@@ -10,23 +10,72 @@
 
 <h1 class="mb-4">Products &amp; features</h1>
 
+@if (_products.Count > 0)
+{
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <label class="form-label fw-semibold" for="product-select">Product</label>
+            <InputSelect id="product-select"
+                         class="form-select"
+                         TValue="Guid"
+                         @bind-Value="_selectedProductId"
+                         @bind-Value:after="LoadFeaturesAsync">
+                @foreach (var product in _products)
+                {
+                    <option value="@product.ProductId">@product.ProductName</option>
+                }
+            </InputSelect>
+            @if (_selectedProduct != null)
+            {
+                <p class="text-muted small mb-0 mt-2">
+                    Software URN: <code>@_selectedProduct.SoftwareUrn</code>
+                </p>
+            }
+        </div>
+    </div>
+}
+
 <div class="row g-4">
     <div class="col-lg-5">
         <div class="card shadow-sm">
             <div class="card-header">Add product</div>
             <div class="card-body">
                 <EditForm Model="NewProduct" OnValidSubmit="AddProductAsync" FormName="add-product" method="post">
+                    @if (_availableCatalogEntries.Count > 0)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label" for="catalog-select">Quick select (optional)</label>
+                            <InputSelect id="catalog-select"
+                                         class="form-select"
+                                         TValue="string"
+                                         @bind-Value="_selectedCatalogName"
+                                         @bind-Value:after="ApplyCatalogSelection">
+                                <option value="">Choose a product...</option>
+                                @foreach (var entry in _availableCatalogEntries)
+                                {
+                                    <option value="@entry.Name">@entry.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    }
+
                     <div class="mb-3">
                         <label class="form-label">Product name</label>
-                        <InputText class="form-control" @bind-Value="NewProduct.Name" />
+                        <InputText class="form-control" @bind-Value="NewProduct.Name"
+                                   placeholder="ConeCalc" />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Software URN</label>
-                        <InputText class="form-control" @bind-Value="NewProduct.SoftwareUrn"
-                                   placeholder="urn:ftt:software:conecalc:7" />
-                        <div class="form-text">Format: urn:ftt:software:&lt;slug&gt;:&lt;major-version&gt;</div>
+                        <label class="form-label">Major version</label>
+                        <InputNumber class="form-control" @bind-Value="NewProduct.MajorVersion" min="1" />
                     </div>
-                    <button type="submit" class="btn btn-primary">Add product</button>
+                    @if (!string.IsNullOrEmpty(PreviewUrn))
+                    {
+                        <div class="form-text mb-3">
+                            Software URN: <code>@PreviewUrn</code>
+                        </div>
+                    }
+
+                    <button type="submit" class="btn btn-primary" disabled="@_busy">Add product</button>
                 </EditForm>
             </div>
         </div>
@@ -52,52 +101,31 @@
     <div class="col-lg-7">
         @if (_products.Count == 0)
         {
-            <div class="alert alert-secondary">No products yet. Add a product to start defining features.</div>
+            <div class="alert alert-secondary">No products yet. Enter a product name and version to get started.</div>
         }
-        else
+        else if (_selectedProduct != null)
         {
-            <div class="card shadow-sm mb-4">
-                <div class="card-body">
-                    <label class="form-label fw-semibold">Product</label>
-                    <InputSelect class="form-select" @bind-Value="_selectedProductId" @bind-Value:after="OnProductChangedAsync">
-                        @foreach (var product in _products)
-                        {
-                            <option value="@product.ProductId">@product.ProductName</option>
-                        }
-                    </InputSelect>
-                    @if (_selectedProduct != null)
+            <div class="card shadow-sm">
+                <div class="card-header fw-semibold">Features for @_selectedProduct.ProductName</div>
+                <ul class="list-group list-group-flush">
+                    @foreach (var feature in _features)
                     {
-                        <p class="text-muted small mb-0 mt-2">
-                            Software URN: <code>@_selectedProduct.SoftwareUrn</code>
-                        </p>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>@feature.FeatureName</span>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger"
+                                    disabled="@_busy"
+                                    @onclick="() => RemoveFeatureAsync(feature.FeatureId)">
+                                Remove
+                            </button>
+                        </li>
                     }
-                </div>
+                    @if (_features.Count == 0)
+                    {
+                        <li class="list-group-item text-muted">No features for this product.</li>
+                    }
+                </ul>
             </div>
-
-            @if (_selectedProduct != null)
-            {
-                <div class="card shadow-sm">
-                    <div class="card-header fw-semibold">Features for @_selectedProduct.ProductName</div>
-                    <ul class="list-group list-group-flush">
-                        @foreach (var feature in _features)
-                        {
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <span>@feature.FeatureName</span>
-                                <button type="button"
-                                        class="btn btn-sm btn-outline-danger"
-                                        disabled="@_busy"
-                                        @onclick="() => RemoveFeatureAsync(feature.FeatureId)">
-                                    Remove
-                                </button>
-                            </li>
-                        }
-                        @if (_features.Count == 0)
-                        {
-                            <li class="list-group-item text-muted">No features for this product.</li>
-                        }
-                    </ul>
-                </div>
-            }
         }
     </div>
 </div>
@@ -116,19 +144,22 @@
 
     private List<Product> _products = [];
     private List<Feature> _features = [];
+    private List<FttProductCatalog.Entry> _availableCatalogEntries = [];
     private Guid _selectedProductId;
+    private string _selectedCatalogName = string.Empty;
     private Product? _selectedProduct;
+    private string? PreviewUrn =>
+        SoftwareUrn.TryCreate(NewProduct.Name, NewProduct.MajorVersion, out var urn) ? urn : null;
     private string? _message;
     private bool _isError;
     private bool _busy;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
-    private async Task OnProductChangedAsync() => await LoadFeaturesAsync();
-
     private async Task LoadAsync()
     {
         _products = await Db.Products.OrderBy(p => p.ProductName).ToListAsync();
+        RefreshCatalogEntries();
 
         if (_products.Count == 0)
         {
@@ -142,6 +173,19 @@
             _selectedProductId = _products[0].ProductId;
 
         await LoadFeaturesAsync();
+    }
+
+    private void RefreshCatalogEntries()
+    {
+        var existingNames = _products.Select(p => p.ProductName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingUrns = _products.Select(p => p.SoftwareUrn).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        _availableCatalogEntries = FttProductCatalog.All
+            .Where(e => !existingNames.Contains(e.Name) && !existingUrns.Contains(e.SoftwareUrn))
+            .ToList();
+
+        if (_availableCatalogEntries.All(e => e.Name != _selectedCatalogName))
+            _selectedCatalogName = string.Empty;
     }
 
     private async Task LoadFeaturesAsync()
@@ -161,37 +205,94 @@
         NewFeature.ProductId = _selectedProductId;
     }
 
+    private void ApplyCatalogSelection()
+    {
+        var entry = FttProductCatalog.FindByName(_selectedCatalogName);
+        if (entry == null)
+            return;
+
+        NewProduct.Name = entry.BaseName;
+        NewProduct.MajorVersion = entry.MajorVersion;
+    }
+
     private async Task AddProductAsync()
     {
-        if (string.IsNullOrWhiteSpace(NewProduct.Name)) return;
+        if (string.IsNullOrWhiteSpace(NewProduct.Name) || NewProduct.MajorVersion < 1)
+        {
+            _isError = true;
+            _message = "Enter a product name and major version.";
+            return;
+        }
 
+        if (!SoftwareUrn.TryCreate(NewProduct.Name, NewProduct.MajorVersion, out var urn))
+        {
+            _isError = true;
+            _message = "Could not build a software URN from that name and version.";
+            return;
+        }
+
+        _busy = true;
         _isError = false;
-        var urn = SoftwareUrn.Normalize(NewProduct.SoftwareUrn);
-        if (!SoftwareUrn.IsValid(urn))
+        _message = null;
+
+        try
+        {
+            var displayName = SoftwareUrn.BuildDisplayName(NewProduct.Name, NewProduct.MajorVersion);
+
+            if (await Db.Products.AnyAsync(p => p.SoftwareUrn == urn))
+            {
+                _isError = true;
+                _message = "A product with that software URN already exists.";
+                return;
+            }
+
+            if (await Db.Products.AnyAsync(p => p.ProductName == displayName))
+            {
+                _isError = true;
+                _message = "A product with that name and version already exists.";
+                return;
+            }
+
+            var catalogEntry = FttProductCatalog.FindByName(displayName);
+            var product = new Product
+            {
+                ProductName = displayName,
+                SoftwareUrn = urn
+            };
+            await Db.Products.AddAsync(product);
+            await Db.SaveChangesAsync();
+
+            if (catalogEntry != null)
+            {
+                foreach (var featureName in catalogEntry.DefaultFeatures)
+                {
+                    await Db.Features.AddAsync(new Feature
+                    {
+                        FeatureName = featureName,
+                        ProductId = product.ProductId
+                    });
+                }
+
+                await Db.SaveChangesAsync();
+            }
+
+            NewProduct = new NewProductModel();
+            _selectedCatalogName = string.Empty;
+            _message = catalogEntry != null
+                ? $"Product '{displayName}' added with {catalogEntry.DefaultFeatures.Length} default feature(s)."
+                : $"Product '{displayName}' added.";
+            _selectedProductId = product.ProductId;
+            await LoadAsync();
+        }
+        catch (Exception ex)
         {
             _isError = true;
-            _message = "Software URN must match urn:ftt:software:<slug>:<major-version> (lowercase slug).";
-            return;
+            _message = $"Could not add product: {ex.Message}";
         }
-
-        if (await Db.Products.AnyAsync(p => p.SoftwareUrn == urn))
+        finally
         {
-            _isError = true;
-            _message = "That software URN is already in use.";
-            return;
+            _busy = false;
         }
-
-        var product = new Product
-        {
-            ProductName = NewProduct.Name.Trim(),
-            SoftwareUrn = urn
-        };
-        await Db.Products.AddAsync(product);
-        await Db.SaveChangesAsync();
-        NewProduct = new NewProductModel();
-        _message = "Product added.";
-        _selectedProductId = product.ProductId;
-        await LoadAsync();
     }
 
     private async Task AddFeatureAsync()
@@ -273,7 +374,7 @@
     private sealed class NewProductModel
     {
         public string Name { get; set; } = string.Empty;
-        public string SoftwareUrn { get; set; } = string.Empty;
+        public int MajorVersion { get; set; } = 1;
     }
 
     private sealed class NewFeatureModel
