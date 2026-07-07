@@ -14,6 +14,9 @@ public class DbSeeder(
     IConfiguration configuration,
     ILogger<DbSeeder> logger)
 {
+    public const string DevSecretsFileName = "aegis-signature.bin";
+    public const string DevPassphrase = "papakura";
+
     private static readonly Dictionary<string, string> KnownSoftwareUrns =
         FttProductCatalog.All.ToDictionary(e => e.Name, e => e.SoftwareUrn);
 
@@ -35,18 +38,17 @@ public class DbSeeder(
             return;
         }
 
-        var secretsPath = Path.Combine(AppContext.BaseDirectory, "aegis-signature.bin");
-        const string devPassphrase = "ftt-aegis-dev-passphrase-change-in-production";
+        var secretsPath = Path.Combine(AppContext.BaseDirectory, DevSecretsFileName);
 
         if (!File.Exists(secretsPath))
         {
-            LicenseUtils.GenerateLicensingSecrets(devPassphrase, secretsPath);
+            LicenseUtils.GenerateLicensingSecrets(DevPassphrase, secretsPath);
             logger.LogWarning(
                 "Generated development licensing secrets at {Path}. Configure LicensingSecrets in appsettings for production.",
                 secretsPath);
         }
 
-        LicenseUtils.LoadLicensingSecrets(devPassphrase, secretsPath);
+        LicenseUtils.LoadLicensingSecrets(DevPassphrase, secretsPath);
         logger.LogInformation("Aegis public key loaded for license signing (development).");
     }
 
