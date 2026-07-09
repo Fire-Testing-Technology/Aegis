@@ -468,7 +468,7 @@ public class LicenseService(AegisDbContext dbContext)
             LicenseType.Trial => LicenseManager.SaveLicense(new TrialLicense(baseLicense,
                 license.ExpirationDate!.Value - DateTime.UtcNow)),
             LicenseType.NodeLocked => LicenseManager.SaveLicense(
-                new NodeLockedLicense(baseLicense, license.HardwareId!)),
+                new NodeLockedLicense(baseLicense, license.HardwareId!, license.IssuedTo)),
             LicenseType.Subscription => LicenseManager.SaveLicense(new SubscriptionLicense(baseLicense,
                 license.IssuedTo,
                 license.ExpirationDate!.Value - DateTime.UtcNow)),

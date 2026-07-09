@@ -35,11 +35,12 @@ public static class LicenseGenerator
     ///     The hardware ID to lock the license to. If null, the current machine's hardware ID will be
     ///     used.
     /// </param>
+    /// <param name="issuedTo">Optional licensee / organisation the license is issued to.</param>
     /// <returns>A new NodeLockedLicense object.</returns>
-    public static NodeLockedLicense GenerateNodeLockedLicense(string? hardwareId = null)
+    public static NodeLockedLicense GenerateNodeLockedLicense(string? hardwareId = null, string? issuedTo = null)
     {
         hardwareId ??= _hardwareIdentifier.GetHardwareIdentifier();
-        return new NodeLockedLicense(hardwareId);
+        return new NodeLockedLicense(hardwareId, issuedTo);
     }
 
     /// <summary>

@@ -3,6 +3,7 @@
 @using System.Security.Claims
 @using Aegis.Models
 @using Aegis.Server.AspNetCore.Data.Context
+@using Aegis.Server.AspNetCore.Utilities
 @using Aegis.Server.DTOs
 @using Aegis.Server.Entities
 @using Aegis.Server.Services
@@ -74,9 +75,10 @@
             }
             @if (_request.LicenseType == LicenseType.NodeLocked)
             {
-                <div class="col-md-6">
-                    <label class="form-label">Hardware ID</label>
-                    <InputText class="form-control" @bind-Value="_request.HardwareId" />
+                <div class="col-12">
+                    <label class="form-label">Request code</label>
+                    <InputTextArea class="form-control font-monospace" rows="4" @bind-Value="_requestCode" />
+                    <div class="form-text">Paste the base64 request code from the client application.</div>
                 </div>
             }
             @if (_request.LicenseType == LicenseType.Subscription)
@@ -124,6 +126,7 @@
     private string? _selectedSoftwareUrn;
     private DateTime? _expirationDate;
     private int? _subscriptionDays = 365;
+    private string? _requestCode;
     private byte[]? _generatedBytes;
     private string? _generatedKey;
     private string? _error;
@@ -162,7 +165,13 @@
             _selectedFeatures.Add(f.FeatureId);
     }
 
-    private async Task OnLicenseTypeChanged() => await Task.CompletedTask;
+    private async Task OnLicenseTypeChanged()
+    {
+        if (_request.LicenseType != LicenseType.NodeLocked)
+            _requestCode = null;
+
+        await Task.CompletedTask;
+    }
 
     private bool IsFeatureSelected(Guid featureId) => _selectedFeatures.Contains(featureId);
 
@@ -190,6 +199,18 @@
             _request.ExpirationDate = _expirationDate?.ToUniversalTime();
             if (_request.LicenseType == LicenseType.Subscription && _subscriptionDays is > 0)
                 _request.SubscriptionDuration = TimeSpan.FromDays(_subscriptionDays.Value);
+
+            if (_request.LicenseType == LicenseType.NodeLocked)
+            {
+                if (string.IsNullOrWhiteSpace(_requestCode))
+                    throw new InvalidOperationException("Request code is required for node-locked licenses.");
+
+                _request.HardwareId = MachineIdEncoding.DecodeRequestCode(_requestCode);
+            }
+            else
+            {
+                _request.HardwareId = null;
+            }
 
             _request.Features = _selectedFeatures.ToDictionary(
                 id => id,
