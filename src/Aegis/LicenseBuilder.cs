@@ -121,6 +121,15 @@ public static class LicenseBuilder
     }
 
     /// <summary>
+    ///     Sets the product software URN this license is bound to.
+    /// </summary>
+    public static BaseLicense WithSoftwareUrn(this BaseLicense baseLicense, string softwareUrn)
+    {
+        baseLicense.SoftwareUrn = softwareUrn;
+        return baseLicense;
+    }
+
+    /// <summary>
     ///     Sets the license key for the license.
     /// </summary>
     /// <param name="baseLicense">The license object to modify.</param>

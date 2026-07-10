@@ -34,6 +34,8 @@ public class LicenseService(AegisDbContext dbContext)
         await dbContext.Licenses.AddAsync(license);
         await dbContext.SaveChangesAsync();
 
+        // Ensure product (and SoftwareUrn) is available when building the signed file.
+        await dbContext.Entry(license).Reference(l => l.Product).LoadAsync();
 
         return GenerateLicenseFile(license);
     }
@@ -343,7 +345,10 @@ public class LicenseService(AegisDbContext dbContext)
     /// <returns>A <see cref="LicenseRenewalResult" /> object containing the renewal result.</returns>
     public async Task<LicenseRenewalResult> RenewLicenseAsync(string licenseKey, DateTime newExpirationDate)
     {
-        var license = await dbContext.Licenses.FirstOrDefaultAsync(l => l.LicenseKey == licenseKey);
+        var license = await dbContext.Licenses
+            .Include(l => l.Product)
+            .Include(l => l.LicenseFeatures).ThenInclude(lf => lf.Feature)
+            .FirstOrDefaultAsync(l => l.LicenseKey == licenseKey);
         if (license == null) return new LicenseRenewalResult(false, "License not found.");
 
         if (license.Type != LicenseType.Subscription)
@@ -482,6 +487,11 @@ public class LicenseService(AegisDbContext dbContext)
 
     private BaseLicense MapLicenseToBaseLicense(License license)
     {
+        var softwareUrn = license.Product?.SoftwareUrn;
+        if (string.IsNullOrWhiteSpace(softwareUrn))
+            throw new InvalidLicenseFormatException(
+                $"Product software URN is missing for product '{license.ProductId}'.");
+
         return new BaseLicense
         {
             LicenseId = license.LicenseId,
@@ -490,7 +500,8 @@ public class LicenseService(AegisDbContext dbContext)
             IssuedOn = license.IssuedOn,
             ExpirationDate = license.ExpirationDate,
             Features = license.LicenseFeatures.ToDictionary(lf => lf.Feature.FeatureName, lf => new Feature {Type = lf.Type, Data = lf.Data}),
-            Issuer = license.Issuer
+            Issuer = license.Issuer,
+            SoftwareUrn = softwareUrn
         };
     }
 

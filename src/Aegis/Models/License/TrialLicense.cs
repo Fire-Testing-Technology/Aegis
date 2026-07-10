@@ -26,6 +26,7 @@ public class TrialLicense : BaseLicense
         Type = LicenseType.Trial;
         Features = license.Features;
         Issuer = license.Issuer;
+        SoftwareUrn = license.SoftwareUrn;
         LicenseId = license.LicenseId;
         LicenseKey = license.LicenseKey;
         Type = license.Type;
