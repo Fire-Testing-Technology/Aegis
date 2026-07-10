@@ -27,6 +27,7 @@ public class FloatingLicense : BaseLicense
         ExpirationDate = license.ExpirationDate;
         Features = license.Features;
         Issuer = license.Issuer;
+        SoftwareUrn = license.SoftwareUrn;
         LicenseId = license.LicenseId;
         LicenseKey = license.LicenseKey;
         Type = license.Type;

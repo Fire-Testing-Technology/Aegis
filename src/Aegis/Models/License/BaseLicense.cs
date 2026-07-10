@@ -29,4 +29,9 @@ public class BaseLicense
     [JsonInclude] public Dictionary<string, Feature> Features { get; protected internal set; } = new();
 
     [JsonInclude] public string Issuer { get; protected internal set; } = string.Empty;
+
+    /// <summary>
+    /// FTT product software URN this license is bound to (e.g. <c>urn:ftt:software:conecalc:7</c>).
+    /// </summary>
+    [JsonInclude] public string SoftwareUrn { get; protected internal set; } = string.Empty;
 }
