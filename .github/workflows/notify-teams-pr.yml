@@ -6,6 +6,7 @@ on:
 
 jobs:
   notify:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-teams-notify') }}
     runs-on: ubuntu-latest
     steps:
       - name: Post PR notification to Teams
