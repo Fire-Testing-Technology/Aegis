@@ -34,7 +34,7 @@ public class Startup(IConfiguration configuration)
             .AddCookie(options =>
             {
                 options.LoginPath = "/login";
-                options.LogoutPath = "/logout";
+                options.LogoutPath = "/auth/logout";
                 options.AccessDeniedPath = "/login";
             });
         services.AddAuthorization();

@@ -345,7 +345,10 @@ public class LicenseService(AegisDbContext dbContext)
     /// <returns>A <see cref="LicenseRenewalResult" /> object containing the renewal result.</returns>
     public async Task<LicenseRenewalResult> RenewLicenseAsync(string licenseKey, DateTime newExpirationDate)
     {
-        var license = await dbContext.Licenses.FirstOrDefaultAsync(l => l.LicenseKey == licenseKey);
+        var license = await dbContext.Licenses
+            .Include(l => l.Product)
+            .Include(l => l.LicenseFeatures).ThenInclude(lf => lf.Feature)
+            .FirstOrDefaultAsync(l => l.LicenseKey == licenseKey);
         if (license == null) return new LicenseRenewalResult(false, "License not found.");
 
         if (license.Type != LicenseType.Subscription)
@@ -409,6 +412,9 @@ public class LicenseService(AegisDbContext dbContext)
 
     private License CreateLicenseEntity(LicenseGenerationRequest request)
     {
+        if (request.IssuingUserId is null || request.IssuingUserId == Guid.Empty)
+            throw new BadRequestException("Issuing user is required to generate a license.");
+
         return new License
         {
             Type = request.LicenseType,
@@ -420,7 +426,7 @@ public class LicenseService(AegisDbContext dbContext)
                 ? DateTime.UtcNow.Add(request.SubscriptionDuration.Value)
                 : null,
             HardwareId = request.HardwareId,
-            UserId = request.IssuingUserId ?? Guid.Empty,
+            UserId = request.IssuingUserId.Value,
             Issuer = "Fire Testing Technology Ltd"
         };
     }
@@ -441,6 +447,9 @@ public class LicenseService(AegisDbContext dbContext)
 
                 licenseFeature = new LicenseFeature
                 {
+                    ProductId = product.ProductId,
+                    FeatureId = feature.FeatureId,
+                    LicenseId = license.LicenseId,
                     Product = product,
                     Feature = feature,
                     License = license,
@@ -449,7 +458,7 @@ public class LicenseService(AegisDbContext dbContext)
                     Data = featureData.Value.Data
                 };
 
-                dbContext.LicenseFeatures.Add(licenseFeature);
+                license.LicenseFeatures.Add(licenseFeature);
             }
             else
             {
@@ -470,7 +479,7 @@ public class LicenseService(AegisDbContext dbContext)
             LicenseType.Trial => LicenseManager.SaveLicense(new TrialLicense(baseLicense,
                 license.ExpirationDate!.Value - DateTime.UtcNow)),
             LicenseType.NodeLocked => LicenseManager.SaveLicense(
-                new NodeLockedLicense(baseLicense, license.HardwareId!)),
+                new NodeLockedLicense(baseLicense, license.HardwareId!, license.IssuedTo)),
             LicenseType.Subscription => LicenseManager.SaveLicense(new SubscriptionLicense(baseLicense,
                 license.IssuedTo,
                 license.ExpirationDate!.Value - DateTime.UtcNow)),

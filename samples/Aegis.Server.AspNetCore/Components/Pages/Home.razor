@@ -1,8 +1,11 @@
 @page "/"
 @attribute [Authorize(Roles = "Admin,User")]
 @using Aegis.Server.AspNetCore.Data.Context
+@using Aegis.Server.AspNetCore.Data
 @using Microsoft.EntityFrameworkCore
+@using Aegis.Utilities
 @inject ApplicationDbContext Db
+@inject IConfiguration Configuration
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -35,15 +38,53 @@
     </div>
 </div>
 
+<div class="row g-3 mt-1">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Licensing public key</h5>
+                <div class="small text-muted mb-2">
+                    This is the key client applications (e.g. ConeCalc) should use to verify licenses.
+                </div>
+                <code style="white-space: pre-wrap; word-break: break-all;">@_publicKey</code>
+            </div>
+        </div>
+    </div>
+</div>
+
 @code {
     private int _productCount;
     private int _licenseCount;
     private int _activeLicenseCount;
+    private string _publicKey = "Not loaded.";
 
     protected override async Task OnInitializedAsync()
     {
         _productCount = await Db.Products.CountAsync();
         _licenseCount = await Db.Licenses.CountAsync();
         _activeLicenseCount = await Db.Licenses.CountAsync(l => l.Status == LicenseStatus.Valid);
+
+        _publicKey = ResolvePublicKey();
+    }
+
+    private string ResolvePublicKey()
+    {
+        var section = Configuration.GetSection("LicensingSecrets");
+        var configured = section["PublicKey"];
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured!;
+
+        var secretsPath = Path.Combine(AppContext.BaseDirectory, DbSeeder.DevSecretsFileName);
+        if (!File.Exists(secretsPath))
+            return $"Not found. Expected {DbSeeder.DevSecretsFileName} next to the server executable.";
+
+        try
+        {
+            return LicenseUtils.LoadLicensingSecrets(DbSeeder.DevPassphrase, secretsPath).PublicKey;
+        }
+        catch (Exception ex)
+        {
+            return $"Failed to load {DbSeeder.DevSecretsFileName}: {ex.Message}";
+        }
     }
 }
