@@ -19,8 +19,9 @@ public sealed class AuthController(CookieSignInService signInService) : Controll
             : Redirect("/login?error=1");
     }
 
+    [HttpGet("/auth/logout")]
     [HttpPost("/auth/logout")]
-    [Authorize]
+    [AllowAnonymous]
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Logout()
     {

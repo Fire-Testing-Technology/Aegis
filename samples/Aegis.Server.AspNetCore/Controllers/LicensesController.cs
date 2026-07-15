@@ -17,6 +17,13 @@ public class LicensesController(LicenseService licenseService) : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
+        if (request.IssuingUserId is null || request.IssuingUserId == Guid.Empty)
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (Guid.TryParse(userId, out var id))
+                request.IssuingUserId = id;
+        }
+
         var license = await licenseService.GenerateLicenseAsync(request);
         return Ok(license);
     }

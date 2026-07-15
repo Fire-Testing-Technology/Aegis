@@ -412,6 +412,9 @@ public class LicenseService(AegisDbContext dbContext)
 
     private License CreateLicenseEntity(LicenseGenerationRequest request)
     {
+        if (request.IssuingUserId is null || request.IssuingUserId == Guid.Empty)
+            throw new BadRequestException("Issuing user is required to generate a license.");
+
         return new License
         {
             Type = request.LicenseType,
@@ -423,7 +426,7 @@ public class LicenseService(AegisDbContext dbContext)
                 ? DateTime.UtcNow.Add(request.SubscriptionDuration.Value)
                 : null,
             HardwareId = request.HardwareId,
-            UserId = request.IssuingUserId ?? Guid.Empty,
+            UserId = request.IssuingUserId.Value,
             Issuer = "Fire Testing Technology Ltd"
         };
     }
@@ -444,6 +447,9 @@ public class LicenseService(AegisDbContext dbContext)
 
                 licenseFeature = new LicenseFeature
                 {
+                    ProductId = product.ProductId,
+                    FeatureId = feature.FeatureId,
+                    LicenseId = license.LicenseId,
                     Product = product,
                     Feature = feature,
                     License = license,
@@ -452,7 +458,7 @@ public class LicenseService(AegisDbContext dbContext)
                     Data = featureData.Value.Data
                 };
 
-                dbContext.LicenseFeatures.Add(licenseFeature);
+                license.LicenseFeatures.Add(licenseFeature);
             }
             else
             {

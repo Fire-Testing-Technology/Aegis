@@ -191,10 +191,7 @@
 
         try
         {
-            var auth = await AuthStateProvider.GetAuthenticationStateAsync();
-            var userId = auth.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (Guid.TryParse(userId, out var id))
-                _request.IssuingUserId = id;
+            _request.IssuingUserId = await ResolveIssuingUserIdAsync();
 
             _request.ExpirationDate = _expirationDate?.ToUniversalTime();
             if (_request.LicenseType == LicenseType.Subscription && _subscriptionDays is > 0)
@@ -225,12 +222,45 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = FormatException(ex);
         }
         finally
         {
             _busy = false;
         }
+    }
+
+    private async Task<Guid> ResolveIssuingUserIdAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var idClaim = auth.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (Guid.TryParse(idClaim, out var claimId)
+            && await Db.Users.AnyAsync(u => u.Id == claimId))
+        {
+            return claimId;
+        }
+
+        var username = auth.User.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            var userId = await Db.Users
+                .Where(u => u.Username == username)
+                .Select(u => (Guid?)u.Id)
+                .FirstOrDefaultAsync();
+            if (userId.HasValue)
+                return userId.Value;
+        }
+
+        throw new InvalidOperationException(
+            "Could not resolve the signed-in user in the database. Sign out and sign in again.");
+    }
+
+    private static string FormatException(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var current = ex; current != null; current = current.InnerException)
+            parts.Add(current.Message);
+        return string.Join(" → ", parts.Distinct(StringComparer.Ordinal));
     }
 
     private async Task DownloadGeneratedAsync()
