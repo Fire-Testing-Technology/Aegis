@@ -5,6 +5,7 @@ using Aegis.Server.AspNetCore.Utilities;
 using Aegis.Server.Entities;
 using Aegis.Utilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting.WindowsServices;
 
 namespace Aegis.Server.AspNetCore.Data;
 
@@ -12,6 +13,7 @@ public class DbSeeder(
     ApplicationDbContext dbContext,
     AuthService authService,
     IConfiguration configuration,
+    IHostEnvironment environment,
     ILogger<DbSeeder> logger)
 {
     public const string DevSecretsFileName = "aegis-signature.bin";
@@ -38,18 +40,19 @@ public class DbSeeder(
             return;
         }
 
-        var secretsPath = Path.Combine(AppContext.BaseDirectory, DevSecretsFileName);
+        var useProgramData = WindowsServiceHelpers.IsWindowsService() || environment.IsProduction();
+        var secretsPath = ServicePaths.ResolveSecretsPath(useProgramData);
 
         if (!File.Exists(secretsPath))
         {
             LicenseUtils.GenerateLicensingSecrets(DevPassphrase, secretsPath);
             logger.LogWarning(
-                "Generated development licensing secrets at {Path}. Configure LicensingSecrets in appsettings for production.",
+                "Generated licensing secrets at {Path}. Configure LicensingSecrets in appsettings for production deployments.",
                 secretsPath);
         }
 
         LicenseUtils.LoadLicensingSecrets(DevPassphrase, secretsPath);
-        logger.LogInformation("Aegis public key loaded for license signing (development).");
+        logger.LogInformation("Aegis public key loaded for license signing from {Path}.", secretsPath);
     }
 
     private async Task SeedRolesAsync()

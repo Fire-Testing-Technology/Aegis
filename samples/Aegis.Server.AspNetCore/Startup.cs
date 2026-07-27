@@ -10,14 +10,24 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using Serilog;
 
 namespace Aegis.Server.AspNetCore;
 
-public class Startup(IConfiguration configuration)
+public class Startup(IConfiguration configuration, IHostEnvironment environment)
 {
     public void ConfigureServices(IServiceCollection services)
     {
+        var useProgramData = WindowsServiceHelpers.IsWindowsService() || environment.IsProduction();
+
+        if (useProgramData)
+        {
+            // Ensure ProgramData folders exist before Serilog / SQLite open files there.
+            _ = ServicePaths.DataDirectory;
+            _ = ServicePaths.LogsDirectory;
+        }
+
         Log.Logger = new LoggerConfiguration()
             .ReadFrom.Configuration(configuration)
             .Enrich.FromLogContext()
@@ -40,9 +50,13 @@ public class Startup(IConfiguration configuration)
         services.AddAuthorization();
 
         services.AddControllers();
-        services.AddDbContext<AegisDbContext, ApplicationDbContext>(options =>
-            options.UseSqlite(configuration.GetConnectionString("DefaultConnection")));
 
+        var connectionString = ServicePaths.ResolveSqliteConnectionString(
+            configuration.GetConnectionString("DefaultConnection"),
+            useProgramData);
+
+        services.AddDbContext<AegisDbContext, ApplicationDbContext>(options =>
+            options.UseSqlite(connectionString));
         services.AddMvc(options => { options.Filters.Add<ApiExceptionFilter>(); });
 
         services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
@@ -53,29 +67,26 @@ public class Startup(IConfiguration configuration)
         services.AddAegisServer();
         services.AddMemoryCache();
         services.AddSerilog();
+        services.AddHttpsRedirection(options =>
+        {
+            options.HttpsPort = 4443;
+        });
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen();
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
     {
+        // Migrations + seed run in Program.Main before the host starts.
         if (env.IsDevelopment())
         {
             app.UseSwagger();
             app.UseSwaggerUI();
         }
 
-        using (var scope = app.ApplicationServices.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            db.Database.Migrate();
+        app.UseHttpsRedirection();
 
-            var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
-            seeder.SeedAsync().GetAwaiter().GetResult();
-        }
-
-        app.UseHttpsRedirection()
-            .UseStaticFiles()
+        app.UseStaticFiles()
             .UseSerilogRequestLogging()
             .UseRouting()
             .UseAuthentication()

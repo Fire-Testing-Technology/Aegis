@@ -3,9 +3,11 @@
 @using Aegis.Server.AspNetCore.Data.Context
 @using Aegis.Server.AspNetCore.Data
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Hosting.WindowsServices
 @using Aegis.Utilities
 @inject ApplicationDbContext Db
 @inject IConfiguration Configuration
+@inject IHostEnvironment HostEnvironment
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -74,9 +76,10 @@
         if (!string.IsNullOrWhiteSpace(configured))
             return configured!;
 
-        var secretsPath = Path.Combine(AppContext.BaseDirectory, DbSeeder.DevSecretsFileName);
+        var useProgramData = WindowsServiceHelpers.IsWindowsService() || HostEnvironment.IsProduction();
+        var secretsPath = ServicePaths.ResolveSecretsPath(useProgramData);
         if (!File.Exists(secretsPath))
-            return $"Not found. Expected {DbSeeder.DevSecretsFileName} next to the server executable.";
+            return $"Not found. Expected {DbSeeder.DevSecretsFileName} at {secretsPath}.";
 
         try
         {
