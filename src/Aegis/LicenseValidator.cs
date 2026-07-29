@@ -114,7 +114,7 @@ public static class LicenseValidator
                (!license.ExpirationDate.HasValue || !(license.ExpirationDate < DateTime.UtcNow)) &&
                _hardwareIdentifier.ValidateHardwareIdentifier(hardwareId ?? license.HardwareId)
             ? LicenseStatus.Valid
-            : LicenseStatus.Revoked;
+            : LicenseStatus.Invalid;
     }
 
     /// <summary>

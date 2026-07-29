@@ -12,15 +12,17 @@ public class NodeLockedLicense : BaseLicense
         Type = LicenseType.NodeLocked;
     }
 
-    public NodeLockedLicense(string hardwareId)
+    public NodeLockedLicense(string hardwareId, string? issuedTo = null)
     {
         HardwareId = hardwareId;
+        IssuedTo = issuedTo ?? string.Empty;
         Type = LicenseType.NodeLocked;
     }
 
-    public NodeLockedLicense(BaseLicense license, string hardwareId)
+    public NodeLockedLicense(BaseLicense license, string hardwareId, string? issuedTo = null)
     {
         HardwareId = hardwareId;
+        IssuedTo = issuedTo ?? string.Empty;
         Type = LicenseType.NodeLocked;
         ExpirationDate = license.ExpirationDate;
         Features = license.Features;
@@ -33,4 +35,6 @@ public class NodeLockedLicense : BaseLicense
     }
 
     [JsonInclude] public string HardwareId { get; protected internal set; }
+
+    [JsonInclude] public string IssuedTo { get; protected internal set; } = string.Empty;
 }

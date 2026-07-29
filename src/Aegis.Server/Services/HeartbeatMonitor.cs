@@ -35,11 +35,19 @@ public class HeartbeatMonitor(IServiceProvider serviceProvider) : BackgroundServ
 
         var timeoutThreshold = DateTime.UtcNow.Subtract(_heartbeatTimeout);
 
-        var expiredActivations = await dbContext.Activations
-            .Where(a => a.LastHeartbeat < timeoutThreshold)
-            .ToListAsync();
+        try
+        {
+            var expiredActivations = await dbContext.Activations
+                .Where(a => a.LastHeartbeat < timeoutThreshold)
+                .ToListAsync();
 
-        dbContext.Activations.RemoveRange(expiredActivations);
-        await dbContext.SaveChangesAsync();
+            dbContext.Activations.RemoveRange(expiredActivations);
+            await dbContext.SaveChangesAsync();
+        }
+        catch (Exception ex) when (ex.Message.Contains("no such table", StringComparison.OrdinalIgnoreCase))
+        {
+            // Fresh databases can hit this before migrations have run.
+            // Next iteration will succeed once schema exists.
+        }
     }
 }

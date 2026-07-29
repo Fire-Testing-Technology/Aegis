@@ -9,3 +9,5 @@ riderModule.iml
 logs/
 aegis.db
 aegis.db-*
+aegis-papakura.db
+aegis-papakura.db-*

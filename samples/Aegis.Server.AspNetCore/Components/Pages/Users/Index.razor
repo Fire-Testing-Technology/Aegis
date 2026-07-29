@@ -6,6 +6,7 @@
 @using Aegis.Server.AspNetCore.Services
 @using Microsoft.AspNetCore.Components
 @using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
 @inject ApplicationDbContext Db
 @inject AuthService AuthService
 
@@ -53,7 +54,7 @@
                         <label class="form-label">Confirm password</label>
                         <InputText type="password" class="form-control" @bind-Value="NewUser.ConfirmPassword" />
                     </div>
-                    <button type="submit" class="btn btn-primary" disabled="@_busy">
+                    <button type="submit" class="btn btn-primary" disabled="@(_busy || !CanAddUser)">
                         @(_busy ? "Adding..." : "Add user")
                     </button>
                 </EditForm>
@@ -76,16 +77,30 @@
                             <th>Full name</th>
                             <th>Email</th>
                             <th>Role</th>
+                            <th class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var user in _users)
                         {
+                            var isAdminUser = IsProtectedAdmin(user);
                             <tr>
                                 <td>@user.Username</td>
                                 <td>@user.FullName</td>
                                 <td>@user.Email</td>
                                 <td><span class="badge text-bg-secondary">@user.Role</span></td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-secondary me-2"
+                                            disabled="@isAdminUser"
+                                            @onclick="() => BeginEdit(user)">
+                                        Edit
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            disabled="@isAdminUser"
+                                            @onclick="() => BeginDelete(user)">
+                                        Delete
+                                    </button>
+                                </td>
                             </tr>
                         }
                     </tbody>
@@ -99,6 +114,88 @@
 {
     <div class="alert alert-success mt-3">@_message</div>
 }
+@if (!string.IsNullOrEmpty(_error) && _users.Count > 0)
+{
+    <div class="alert alert-danger mt-3">@_error</div>
+}
+
+@if (_editing is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit user</h5>
+                    <button type="button" class="btn-close" @onclick="CancelEdit"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="_editing" OnValidSubmit="SaveEditAsync" FormName="edit-user" method="post">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label class="form-label">Username</label>
+                            <InputText class="form-control" Value="_editing.Username" disabled />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Full name</label>
+                            <InputText class="form-control" @bind-Value="_editing.FullName" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <InputText class="form-control" @bind-Value="_editing.Email" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Role</label>
+                            <InputSelect class="form-select" @bind-Value="_editing.Role">
+                                @foreach (var role in _roles)
+                                {
+                                    <option value="@role.Name">@role.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">New password (optional)</label>
+                            <InputText type="password" class="form-control" @bind-Value="_editing.Password" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Confirm new password</label>
+                            <InputText type="password" class="form-control" @bind-Value="_editing.ConfirmPassword" />
+                        </div>
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary" @onclick="CancelEdit" disabled="@_busy">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@_busy">@(_busy ? "Saving..." : "Save")</button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_deleting is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title text-danger">Delete user</h5>
+                    <button type="button" class="btn-close" @onclick="CancelDelete"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">
+                        Delete user <strong>@_deleting.Username</strong>?
+                    </p>
+                    <div class="alert alert-warning mb-3">
+                        This will also delete any licenses owned by this user.
+                    </div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="CancelDelete" disabled="@_busy">Cancel</button>
+                        <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteAsync" disabled="@_busy">@(_busy ? "Deleting..." : "Delete")</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     [SupplyParameterFromForm(FormName = "add-user")]
@@ -109,6 +206,8 @@
     private string? _message;
     private string? _error;
     private bool _busy;
+    private EditUserModel? _editing;
+    private User? _deleting;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -126,6 +225,13 @@
         _busy = true;
         _error = null;
         _message = null;
+
+        if (!CanAddUser)
+        {
+            _error = "All fields are required, and passwords must match.";
+            _busy = false;
+            return;
+        }
 
         if (NewUser.Password != NewUser.ConfirmPassword)
         {
@@ -147,5 +253,184 @@
         }
 
         _busy = false;
+    }
+
+    private bool CanAddUser =>
+        !string.IsNullOrWhiteSpace(NewUser.Username) &&
+        !string.IsNullOrWhiteSpace(NewUser.FullName) &&
+        !string.IsNullOrWhiteSpace(NewUser.Email) &&
+        IsValidEmail(NewUser.Email) &&
+        !string.IsNullOrWhiteSpace(NewUser.Role) &&
+        !string.IsNullOrWhiteSpace(NewUser.Password) &&
+        !string.IsNullOrWhiteSpace(NewUser.ConfirmPassword) &&
+        string.Equals(NewUser.Password, NewUser.ConfirmPassword, StringComparison.Ordinal);
+
+    private static bool IsValidEmail(string email) =>
+        new EmailAddressAttribute().IsValid(email);
+
+    private static bool IsProtectedAdmin(User user) =>
+        string.Equals(user.Username, "admin", StringComparison.OrdinalIgnoreCase);
+
+    private void BeginEdit(User user)
+    {
+        _error = null;
+        _message = null;
+        if (IsProtectedAdmin(user))
+        {
+            _error = "The admin user cannot be edited.";
+            return;
+        }
+
+        _editing = new EditUserModel
+        {
+            Id = user.Id,
+            Username = user.Username,
+            FullName = user.FullName,
+            Email = user.Email,
+            Role = user.Role
+        };
+    }
+
+    private void CancelEdit()
+    {
+        if (_busy) return;
+        _editing = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editing is null)
+            return;
+
+        _busy = true;
+        _error = null;
+        _message = null;
+
+        try
+        {
+            var user = await Db.Users.FirstOrDefaultAsync(u => u.Id == _editing.Id);
+            if (user is null)
+            {
+                _error = "User no longer exists.";
+                return;
+            }
+
+            if (IsProtectedAdmin(user))
+            {
+                _error = "The admin user cannot be edited.";
+                return;
+            }
+
+            if (!await Db.Roles.AnyAsync(r => r.Name == _editing.Role))
+            {
+                _error = "Role is invalid.";
+                return;
+            }
+
+            if (!string.Equals(user.Username, _editing.Username, StringComparison.Ordinal))
+            {
+                _error = "Username cannot be changed.";
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_editing.Password) || !string.IsNullOrWhiteSpace(_editing.ConfirmPassword))
+            {
+                if (_editing.Password != _editing.ConfirmPassword)
+                {
+                    _error = "Passwords do not match.";
+                    return;
+                }
+
+                user.PasswordHash = AuthService.HashPassword(_editing.Password ?? string.Empty);
+            }
+
+            user.FullName = _editing.FullName;
+            user.Email = _editing.Email;
+            user.Role = _editing.Role;
+
+            await Db.SaveChangesAsync();
+
+            _message = $"User '{user.Username}' updated.";
+            _editing = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void BeginDelete(User user)
+    {
+        _error = null;
+        _message = null;
+        if (IsProtectedAdmin(user))
+        {
+            _error = "The admin user cannot be deleted.";
+            return;
+        }
+
+        _deleting = user;
+    }
+
+    private void CancelDelete()
+    {
+        if (_busy) return;
+        _deleting = null;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deleting is null)
+            return;
+
+        _busy = true;
+        _error = null;
+        _message = null;
+
+        try
+        {
+            var user = await Db.Users.FirstOrDefaultAsync(u => u.Id == _deleting.Id);
+            if (user is null)
+            {
+                _error = "User no longer exists.";
+                return;
+            }
+
+            if (IsProtectedAdmin(user))
+            {
+                _error = "The admin user cannot be deleted.";
+                return;
+            }
+
+            Db.Users.Remove(user);
+            await Db.SaveChangesAsync();
+            _message = $"User '{user.Username}' deleted.";
+            _deleting = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class EditUserModel
+    {
+        public Guid Id { get; init; }
+        public string Username { get; init; } = string.Empty;
+        public string? FullName { get; set; }
+        public string? Email { get; set; }
+        public string Role { get; set; } = "User";
+        public string? Password { get; set; }
+        public string? ConfirmPassword { get; set; }
     }
 }

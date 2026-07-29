@@ -1,17 +1,12 @@
 @page "/logout"
 @attribute [Authorize]
-@using Aegis.Server.AspNetCore.Services
-@inject CookieSignInService SignInService
 @inject NavigationManager Navigation
-@inject IHttpContextAccessor HttpContextAccessor
 
 @code {
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        var httpContext = HttpContextAccessor.HttpContext;
-        if (httpContext != null)
-            await SignInService.SignOutAsync(httpContext);
-
-        Navigation.NavigateTo("/login", forceLoad: true);
+        // Cookie sign-out must happen on a full HTTP request before the response starts.
+        // Blazor interactive circuits cannot modify auth cookies once rendering has begun.
+        Navigation.NavigateTo("/auth/logout", forceLoad: true);
     }
 }
