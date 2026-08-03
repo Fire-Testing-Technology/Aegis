@@ -14,6 +14,10 @@
                     <FttLogo Size="sidebar" />
                 </div>
                 <h2 class="mb-4 text-center">Sign in</h2>
+                @if (!string.IsNullOrEmpty(_info))
+                {
+                    <div class="alert alert-success">@_info</div>
+                }
                 @if (!string.IsNullOrEmpty(_error))
                 {
                     <div class="alert alert-danger">@_error</div>
@@ -31,6 +35,9 @@
                         Sign in
                     </button>
                 </form>
+                <p class="text-center small mt-3 mb-0">
+                    Need an account? <a href="/register">Register</a>
+                </p>
                 <p class="text-muted small mt-3 mb-0">
                     Default dev account: <code>admin</code> / <code>Admin123!</code>
                 </p>
@@ -41,6 +48,7 @@
 
 @code {
     private string? _error;
+    private string? _info;
 
     protected override void OnInitialized()
     {
@@ -48,5 +56,7 @@
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
         if (query.TryGetValue("error", out var value) && value == "1")
             _error = "Invalid username or password.";
+        if (query.TryGetValue("registered", out var registered) && registered == "1")
+            _info = "Account created. You can sign in now.";
     }
 }
