@@ -57,6 +57,7 @@
                         <option value="@type">@type</option>
                     }
                 </InputSelect>
+                <div class="form-text">@GetLicenseTypeDescription(_request.LicenseType)</div>
             </div>
             <div class="col-md-6">
                 <label class="form-label">Issued to</label>
@@ -172,6 +173,23 @@
 
         await Task.CompletedTask;
     }
+
+    private static string GetLicenseTypeDescription(LicenseType type) => type switch
+    {
+        LicenseType.Standard =>
+            "Perpetual (or dated) license for a single user/installation. Not tied to a specific machine.",
+        LicenseType.Trial =>
+            "Time-limited evaluation license. Expires after the configured period and cannot be renewed as a trial.",
+        LicenseType.NodeLocked =>
+            "Bound to one machine using the customer’s request code (hardware ID). Use this for ConeCalc and similar apps.",
+        LicenseType.Subscription =>
+            "Time-limited license that can be renewed. Set the subscription duration in days below.",
+        LicenseType.Concurrent =>
+            "Shared pool: up to Max active users may run the software at the same time (check-in/check-out).",
+        LicenseType.Floating =>
+            "Network floating seats: users borrow a seat while online, up to Max active users.",
+        _ => string.Empty
+    };
 
     private bool IsFeatureSelected(Guid featureId) => _selectedFeatures.Contains(featureId);
 
