@@ -100,7 +100,7 @@ public class LicenseServiceTests
         {
             LicenseType.Standard => LicenseManager.SaveLicense(new StandardLicense(baseLicense, license.IssuedTo)),
             LicenseType.Trial => LicenseManager.SaveLicense(new TrialLicense(baseLicense,
-                license.ExpirationDate!.Value - DateTime.UtcNow)),
+                license.ExpirationDate!.Value - DateTime.UtcNow, license.IssuedTo)),
             LicenseType.NodeLocked => LicenseManager.SaveLicense(
                 new NodeLockedLicense(baseLicense, license.HardwareId!)),
             LicenseType.Subscription => LicenseManager.SaveLicense(new SubscriptionLicense(baseLicense,

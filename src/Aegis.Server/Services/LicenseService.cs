@@ -408,6 +408,10 @@ public class LicenseService(AegisDbContext dbContext)
 
         if (request.ExpirationDate.HasValue && request.ExpirationDate.Value < DateTime.UtcNow)
             throw new BadRequestException("Expiration date cannot be in the past");
+
+        if (request.LicenseType == LicenseType.Trial
+            && (request.TrialDuration is null || request.TrialDuration <= TimeSpan.Zero))
+            throw new BadRequestException("Trial licenses require a positive TrialDuration (from first client activation).");
     }
 
     private License CreateLicenseEntity(LicenseGenerationRequest request)
@@ -415,13 +419,24 @@ public class LicenseService(AegisDbContext dbContext)
         if (request.IssuingUserId is null || request.IssuingUserId == Guid.Empty)
             throw new BadRequestException("Issuing user is required to generate a license.");
 
+        // For trials, ExpirationDate on the server record stores IssuedOn + duration so the period
+        // can be reconstructed; the signed file uses TrialPeriod and no fixed calendar expiry.
+        DateTime? expirationDate = request.ExpirationDate;
+        DateTime issuedOn = DateTime.UtcNow;
+        if (request.LicenseType == LicenseType.Trial && request.TrialDuration is { } trialDuration)
+        {
+            issuedOn = DateTime.UtcNow;
+            expirationDate = issuedOn.Add(trialDuration);
+        }
+
         return new License
         {
             Type = request.LicenseType,
             ProductId = request.ProductId,
             IssuedTo = request.IssuedTo,
             MaxActiveUsersCount = request.MaxActiveUsersCount,
-            ExpirationDate = request.ExpirationDate,
+            IssuedOn = issuedOn,
+            ExpirationDate = expirationDate,
             SubscriptionExpiryDate = request.SubscriptionDuration != null
                 ? DateTime.UtcNow.Add(request.SubscriptionDuration.Value)
                 : null,
@@ -477,7 +492,7 @@ public class LicenseService(AegisDbContext dbContext)
         {
             LicenseType.Standard => LicenseManager.SaveLicense(new StandardLicense(baseLicense, license.IssuedTo)),
             LicenseType.Trial => LicenseManager.SaveLicense(new TrialLicense(baseLicense,
-                license.ExpirationDate!.Value - DateTime.UtcNow)),
+                ResolveTrialPeriod(license), license.IssuedTo)),
             LicenseType.NodeLocked => LicenseManager.SaveLicense(
                 new NodeLockedLicense(baseLicense, license.HardwareId!, license.IssuedTo)),
             LicenseType.Subscription => LicenseManager.SaveLicense(new SubscriptionLicense(baseLicense,
@@ -509,6 +524,19 @@ public class LicenseService(AegisDbContext dbContext)
             Issuer = license.Issuer,
             SoftwareUrn = softwareUrn
         };
+    }
+
+    private static TimeSpan ResolveTrialPeriod(License license)
+    {
+        if (license.ExpirationDate is not { } end)
+            throw new InvalidLicenseFormatException(
+                "Trial license is missing duration metadata (ExpirationDate).");
+
+        var period = end - license.IssuedOn;
+        if (period <= TimeSpan.Zero)
+            throw new InvalidLicenseFormatException("Trial duration must be positive.");
+
+        return period;
     }
 
     #endregion

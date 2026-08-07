@@ -37,6 +37,7 @@ public static class LicensesCsv
         public string? SoftwareUrn { get; init; }
         public LicenseType Type { get; init; }
         public string IssuedTo { get; init; } = string.Empty;
+        public DateTime? IssuedOnUtc { get; init; }
         public DateTime? ExpiresUtc { get; init; }
         public string? HardwareId { get; init; }
         public string? RequestCode { get; init; }
@@ -124,6 +125,25 @@ public static class LicensesCsv
             if (string.IsNullOrWhiteSpace(issuedTo))
                 throw new InvalidOperationException($"Line {lineIndex + 1}: IssuedTo is required.");
 
+            DateTime? issuedOn = null;
+            var issuedOnText = Get("IssuedOnUtc");
+            if (!string.IsNullOrWhiteSpace(issuedOnText))
+            {
+                if (!DateTime.TryParse(
+                        issuedOnText,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces,
+                        out var parsedIssuedOn))
+                {
+                    throw new InvalidOperationException(
+                        $"Line {lineIndex + 1}: invalid IssuedOnUtc '{issuedOnText}'.");
+                }
+
+                issuedOn = parsedIssuedOn.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(parsedIssuedOn, DateTimeKind.Utc)
+                    : parsedIssuedOn.ToUniversalTime();
+            }
+
             DateTime? expires = null;
             var expiresText = Get("ExpiresUtc");
             if (!string.IsNullOrWhiteSpace(expiresText))
@@ -165,6 +185,7 @@ public static class LicensesCsv
                 SoftwareUrn = EmptyToNull(Get("SoftwareUrn")),
                 Type = type,
                 IssuedTo = issuedTo,
+                IssuedOnUtc = issuedOn,
                 ExpiresUtc = expires,
                 HardwareId = EmptyToNull(Get("HardwareId")),
                 RequestCode = EmptyToNull(Get("RequestCode")),

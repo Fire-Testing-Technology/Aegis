@@ -78,7 +78,8 @@ public static class LicenseValidator
     }
 
     /// <summary>
-    ///     Validates a trial license.
+    ///     Validates a trial license signature and period metadata.
+    ///     Calendar expiry is enforced on the client from first activation + <see cref="TrialLicense.TrialPeriod"/>.
     /// </summary>
     /// <param name="licenseData">The raw license data.</param>
     /// <returns>True if the license is valid, false otherwise.</returns>
@@ -88,11 +89,9 @@ public static class LicenseValidator
         if (verifiedLicense.Status != LicenseStatus.Valid)
             return verifiedLicense.Status;
 
-        return verifiedLicense.License is TrialLicense license && license.ExpirationDate > DateTime.UtcNow &&
-               license.TrialPeriod > TimeSpan.Zero &&
-               license.IssuedOn + license.TrialPeriod > DateTime.UtcNow
+        return verifiedLicense.License is TrialLicense { TrialPeriod: { Ticks: > 0 } }
             ? LicenseStatus.Valid
-            : LicenseStatus.Expired;
+            : LicenseStatus.Invalid;
     }
 
     /// <summary>

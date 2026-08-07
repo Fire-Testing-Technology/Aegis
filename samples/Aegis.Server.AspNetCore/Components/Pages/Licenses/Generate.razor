@@ -51,8 +51,8 @@
             </div>
             <div class="col-md-6">
                 <label class="form-label">License type</label>
-                <InputSelect class="form-select" @bind-Value="_request.LicenseType" @bind-Value:after="OnLicenseTypeChanged">
-                    @foreach (var type in Enum.GetValues<LicenseType>())
+                <InputSelect class="form-select" @bind-Value="_request.LicenseType">
+                    @foreach (var type in _selectableLicenseTypes)
                     {
                         <option value="@type">@type</option>
                     }
@@ -63,32 +63,41 @@
                 <label class="form-label">Issued to</label>
                 <InputText class="form-control" @bind-Value="_request.IssuedTo" />
             </div>
-            <div class="col-md-6">
-                <label class="form-label">Expiration date (optional)</label>
-                <InputDate class="form-control" @bind-Value="_expirationDate" />
+            @if (_request.LicenseType != LicenseType.Trial)
+            {
+                <div class="col-md-6">
+                    <label class="form-label">Expiration date (optional)</label>
+                    <InputDate class="form-control" @bind-Value="_expirationDate" />
+                </div>
+            }
+            @if (_request.LicenseType == LicenseType.Trial)
+            {
+                <div class="col-md-6">
+                    <label class="form-label">Trial period (days)</label>
+                    <InputNumber class="form-control" @bind-Value="_trialDays" />
+                    <div class="form-text">Starts on the customer’s first run. Must be applied within 24 hours of issue.</div>
+                </div>
+            }
+            <div class="col-12">
+                <label class="form-label">Request code</label>
+                <InputTextArea class="form-control font-monospace" rows="4"
+                               @bind-Value="_requestCode"
+                               @bind-Value:after="OnRequestCodeChangedAsync" />
+                <div class="form-text">
+                    @if (_request.LicenseType == LicenseType.NodeLocked)
+                    {
+                        <text>Paste the base64 request code from the client application. Used to select the product and bind the machine.</text>
+                    }
+                    else
+                    {
+                        <text>Paste the base64 request code from the client application. Used to select the product.</text>
+                    }
+                    @if (!string.IsNullOrEmpty(_requestCodeProductHint))
+                    {
+                        <span> Detected product: <strong>@_requestCodeProductHint</strong>.</span>
+                    }
+                </div>
             </div>
-            @if (_request.LicenseType is LicenseType.Concurrent or LicenseType.Floating)
-            {
-                <div class="col-md-6">
-                    <label class="form-label">Max active users</label>
-                    <InputNumber class="form-control" @bind-Value="_request.MaxActiveUsersCount" />
-                </div>
-            }
-            @if (_request.LicenseType == LicenseType.NodeLocked)
-            {
-                <div class="col-12">
-                    <label class="form-label">Request code</label>
-                    <InputTextArea class="form-control font-monospace" rows="4" @bind-Value="_requestCode" />
-                    <div class="form-text">Paste the base64 request code from the client application.</div>
-                </div>
-            }
-            @if (_request.LicenseType == LicenseType.Subscription)
-            {
-                <div class="col-md-6">
-                    <label class="form-label">Subscription duration (days)</label>
-                    <InputNumber class="form-control" @bind-Value="_subscriptionDays" />
-                </div>
-            }
         </div>
 
         @if (_productFeatures.Count > 0)
@@ -122,12 +131,20 @@
         IssuedTo = string.Empty
     };
 
+    private static readonly LicenseType[] _selectableLicenseTypes =
+    [
+        LicenseType.Standard,
+        LicenseType.Trial,
+        LicenseType.NodeLocked
+    ];
+
     private List<Product> _products = [];
     private List<Aegis.Server.Entities.Feature> _productFeatures = [];
     private string? _selectedSoftwareUrn;
     private DateTime? _expirationDate;
-    private int? _subscriptionDays = 365;
+    private int? _trialDays = 30;
     private string? _requestCode;
+    private string? _requestCodeProductHint;
     private byte[]? _generatedBytes;
     private string? _generatedKey;
     private string? _error;
@@ -166,12 +183,38 @@
             _selectedFeatures.Add(f.FeatureId);
     }
 
-    private async Task OnLicenseTypeChanged()
+    private async Task OnRequestCodeChangedAsync()
     {
-        if (_request.LicenseType != LicenseType.NodeLocked)
-            _requestCode = null;
+        _requestCodeProductHint = null;
+        if (string.IsNullOrWhiteSpace(_requestCode))
+            return;
 
-        await Task.CompletedTask;
+        try
+        {
+            var payload = MachineIdEncoding.DecodeRequestCodePayload(_requestCode);
+            if (string.IsNullOrWhiteSpace(payload.SoftwareUrn))
+                return;
+
+            var product = _products.FirstOrDefault(p =>
+                string.Equals(p.SoftwareUrn, payload.SoftwareUrn, StringComparison.OrdinalIgnoreCase));
+            if (product == null)
+            {
+                _requestCodeProductHint = $"unknown URN ({payload.SoftwareUrn})";
+                return;
+            }
+
+            if (_request.ProductId != product.ProductId)
+            {
+                _request.ProductId = product.ProductId;
+                await LoadFeaturesAsync();
+            }
+
+            _requestCodeProductHint = product.ProductName;
+        }
+        catch
+        {
+            // Leave product unchanged until generate validates the code.
+        }
     }
 
     private static string GetLicenseTypeDescription(LicenseType type) => type switch
@@ -179,15 +222,9 @@
         LicenseType.Standard =>
             "Perpetual (or dated) license for a single user/installation. Not tied to a specific machine.",
         LicenseType.Trial =>
-            "Time-limited evaluation license. Expires after the configured period and cannot be renewed as a trial.",
+            "Evaluation license. Must be applied within 24 hours of issue. The trial period then starts on the customer’s first run.",
         LicenseType.NodeLocked =>
             "Bound to one machine using the customer’s request code (hardware ID). Use this for ConeCalc and similar apps.",
-        LicenseType.Subscription =>
-            "Time-limited license that can be renewed. Set the subscription duration in days below.",
-        LicenseType.Concurrent =>
-            "Shared pool: up to Max active users may run the software at the same time (check-in/check-out).",
-        LicenseType.Floating =>
-            "Network floating seats: users borrow a seat while online, up to Max active users.",
         _ => string.Empty
     };
 
@@ -212,20 +249,26 @@
             _request.IssuingUserId = await ResolveIssuingUserIdAsync();
 
             _request.ExpirationDate = _expirationDate?.ToUniversalTime();
-            if (_request.LicenseType == LicenseType.Subscription && _subscriptionDays is > 0)
-                _request.SubscriptionDuration = TimeSpan.FromDays(_subscriptionDays.Value);
+
+            if (_request.LicenseType == LicenseType.Trial)
+            {
+                if (_trialDays is not > 0)
+                    throw new InvalidOperationException("Trial period (days) must be greater than zero.");
+
+                _request.TrialDuration = TimeSpan.FromDays(_trialDays.Value);
+                _request.ExpirationDate = null;
+            }
+
+            if (string.IsNullOrWhiteSpace(_requestCode))
+                throw new InvalidOperationException("Request code is required.");
+
+            var payload = MachineIdEncoding.DecodeRequestCodePayload(_requestCode);
+            await ApplyProductFromRequestCodeAsync(payload);
 
             if (_request.LicenseType == LicenseType.NodeLocked)
-            {
-                if (string.IsNullOrWhiteSpace(_requestCode))
-                    throw new InvalidOperationException("Request code is required for node-locked licenses.");
-
-                _request.HardwareId = MachineIdEncoding.DecodeRequestCode(_requestCode);
-            }
+                _request.HardwareId = payload.MachineId;
             else
-            {
                 _request.HardwareId = null;
-            }
 
             _request.Features = _selectedFeatures.ToDictionary(
                 id => id,
@@ -246,6 +289,31 @@
         {
             _busy = false;
         }
+    }
+
+    private async Task ApplyProductFromRequestCodeAsync(LicenseRequestCode payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload.SoftwareUrn))
+        {
+            throw new InvalidOperationException(
+                "Request code does not include a software URN. Ask the customer for a request code from a current build of the application.");
+        }
+
+        var product = _products.FirstOrDefault(p =>
+            string.Equals(p.SoftwareUrn, payload.SoftwareUrn, StringComparison.OrdinalIgnoreCase));
+        if (product == null)
+        {
+            throw new InvalidOperationException(
+                $"Request code is for '{payload.SoftwareUrn}', which is not a product in this server.");
+        }
+
+        if (_request.ProductId != product.ProductId)
+        {
+            _request.ProductId = product.ProductId;
+            await LoadFeaturesAsync();
+        }
+
+        _requestCodeProductHint = product.ProductName;
     }
 
     private async Task<Guid> ResolveIssuingUserIdAsync()

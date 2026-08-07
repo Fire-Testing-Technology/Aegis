@@ -233,7 +233,7 @@ else
                     if (row.Type == LicenseType.NodeLocked)
                     {
                         if (string.IsNullOrWhiteSpace(hardwareId) && !string.IsNullOrWhiteSpace(row.RequestCode))
-                            hardwareId = MachineIdEncoding.DecodeRequestCode(row.RequestCode);
+                            hardwareId = MachineIdEncoding.DecodeRequestCodePayload(row.RequestCode).MachineId;
 
                         if (string.IsNullOrWhiteSpace(hardwareId))
                         {
@@ -254,7 +254,7 @@ else
                         LicenseType = row.Type,
                         ProductId = product.ProductId,
                         IssuedTo = row.IssuedTo,
-                        ExpirationDate = row.ExpiresUtc,
+                        ExpirationDate = row.Type == LicenseType.Trial ? null : row.ExpiresUtc,
                         HardwareId = hardwareId,
                         MaxActiveUsersCount = row.MaxActiveUsersCount,
                         IssuingUserId = issuerId,
@@ -262,6 +262,24 @@ else
                             f => f.FeatureId,
                             _ => Aegis.Models.Feature.FromBool(true))
                     };
+
+                    if (row.Type == LicenseType.Trial)
+                    {
+                        TimeSpan? trialDuration = null;
+                        if (row.IssuedOnUtc is { } issued && row.ExpiresUtc is { } ends && ends > issued)
+                            trialDuration = ends - issued;
+                        else if (row.ExpiresUtc is { } endsOnly && endsOnly > DateTime.UtcNow)
+                            trialDuration = endsOnly - DateTime.UtcNow;
+
+                        if (trialDuration is null || trialDuration <= TimeSpan.Zero)
+                        {
+                            errors.Add(
+                                $"Line {row.LineNumber}: Trial requires IssuedOnUtc+ExpiresUtc (duration) or a future ExpiresUtc.");
+                            continue;
+                        }
+
+                        request.TrialDuration = trialDuration;
+                    }
 
                     if (row.Type == LicenseType.Subscription && row.ExpiresUtc is { } expires)
                     {
