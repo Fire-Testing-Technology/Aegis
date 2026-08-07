@@ -1,23 +1,34 @@
 @page "/licenses"
 @attribute [Authorize(Roles = "Admin,User")]
+@using System.Security.Claims
+@using System.Text
+@using Aegis.Enums
+@using Aegis.Models
 @using Aegis.Server.AspNetCore.Data.Context
+@using Aegis.Server.AspNetCore.Utilities
+@using Aegis.Server.DTOs
 @using Aegis.Server.Entities
 @using Aegis.Server.Services
+@using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.EntityFrameworkCore
-@using System.Text
 @inject ApplicationDbContext Db
 @inject LicenseService LicenseService
+@inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime Js
 
 <PageTitle>Licenses</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="mb-0">Licenses</h1>
-    <div class="d-flex align-items-center gap-2">
-        <button type="button" class="btn btn-outline-secondary" @onclick="ExportCsvAsync">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button type="button" class="btn btn-outline-secondary" @onclick="ExportCsvAsync" disabled="@_busy">
             Export CSV
         </button>
         <AuthorizeView Roles="Admin">
+            <label class="btn btn-outline-secondary mb-0 @( _busy ? "disabled" : null )">
+                Import CSV
+                <InputFile OnChange="ImportCsvAsync" accept=".csv,text/csv" class="d-none" disabled="@_busy" />
+            </label>
             <a class="btn btn-primary" href="licenses/generate">Generate license</a>
         </AuthorizeView>
     </div>
@@ -25,7 +36,7 @@
 
 @if (!string.IsNullOrEmpty(_message))
 {
-    <div class="alert alert-info">@_message</div>
+    <div class="alert alert-info" style="white-space: pre-wrap;">@_message</div>
 }
 
 @if (_licenses.Count == 0)
@@ -82,6 +93,7 @@ else
 @code {
     private List<License> _licenses = [];
     private string? _message;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -148,10 +160,19 @@ else
     {
         try
         {
-            // Ensure we export the latest data
             await LoadAsync();
 
-            var csv = BuildLicensesCsv(_licenses);
+            var csv = LicensesCsv.Build(_licenses.Select(l => (
+                l.LicenseKey,
+                l.Product?.ProductName ?? string.Empty,
+                l.Product?.SoftwareUrn ?? string.Empty,
+                l.Type.ToString(),
+                l.IssuedTo ?? string.Empty,
+                l.Issuer ?? string.Empty,
+                l.Status.ToString(),
+                l.IssuedOn.ToUniversalTime().ToString("O"),
+                l.ExpirationDate?.ToUniversalTime().ToString("O") ?? string.Empty)));
+
             var bytes = WithUtf8Bom(Encoding.UTF8.GetBytes(csv));
             var base64 = Convert.ToBase64String(bytes);
             var fileName = $"licenses-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv";
@@ -164,44 +185,167 @@ else
         }
     }
 
-    private static string BuildLicensesCsv(IEnumerable<License> licenses)
+    private async Task ImportCsvAsync(InputFileChangeEventArgs e)
     {
-        var sb = new StringBuilder();
+        _busy = true;
+        _message = null;
 
-        sb.AppendLine(string.Join(',',
-            "LicenseKey",
-            "Product",
-            "SoftwareUrn",
-            "Type",
-            "IssuedTo",
-            "Issuer",
-            "Status",
-            "IssuedOnUtc",
-            "ExpiresUtc"));
-
-        foreach (var l in licenses)
+        try
         {
-            sb.AppendLine(string.Join(',',
-                Csv(l.LicenseKey),
-                Csv(l.Product?.ProductName ?? string.Empty),
-                Csv(l.Product?.SoftwareUrn ?? string.Empty),
-                Csv(l.Type.ToString()),
-                Csv(l.IssuedTo ?? string.Empty),
-                Csv(l.Issuer ?? string.Empty),
-                Csv(l.Status.ToString()),
-                Csv(l.IssuedOn.ToUniversalTime().ToString("O")),
-                Csv(l.ExpirationDate?.ToUniversalTime().ToString("O") ?? string.Empty)));
-        }
+            var file = e.File;
+            if (file == null)
+            {
+                _message = "No CSV file selected.";
+                return;
+            }
 
-        return sb.ToString();
+            await using var stream = file.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var csvText = await reader.ReadToEndAsync();
+
+            var rows = LicensesCsv.Parse(csvText);
+            var issuerId = await ResolveIssuingUserIdAsync();
+            var products = await Db.Products.Include(p => p.Features).ToListAsync();
+
+            var created = 0;
+            var skipped = 0;
+            var errors = new List<string>();
+
+            foreach (var row in rows)
+            {
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(row.LicenseKey)
+                        && await Db.Licenses.AnyAsync(l => l.LicenseKey == row.LicenseKey))
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    var product = ResolveProduct(products, row);
+                    if (product == null)
+                    {
+                        errors.Add($"Line {row.LineNumber}: product not found (Product='{row.Product}', SoftwareUrn='{row.SoftwareUrn}').");
+                        continue;
+                    }
+
+                    string? hardwareId = row.HardwareId;
+                    if (row.Type == LicenseType.NodeLocked)
+                    {
+                        if (string.IsNullOrWhiteSpace(hardwareId) && !string.IsNullOrWhiteSpace(row.RequestCode))
+                            hardwareId = MachineIdEncoding.DecodeRequestCode(row.RequestCode);
+
+                        if (string.IsNullOrWhiteSpace(hardwareId))
+                        {
+                            errors.Add($"Line {row.LineNumber}: NodeLocked requires HardwareId or RequestCode.");
+                            continue;
+                        }
+                    }
+
+                    if (row.Type is LicenseType.Concurrent or LicenseType.Floating
+                        && row.MaxActiveUsersCount is null or < 1)
+                    {
+                        errors.Add($"Line {row.LineNumber}: {row.Type} requires MaxActiveUsersCount.");
+                        continue;
+                    }
+
+                    var request = new LicenseGenerationRequest
+                    {
+                        LicenseType = row.Type,
+                        ProductId = product.ProductId,
+                        IssuedTo = row.IssuedTo,
+                        ExpirationDate = row.ExpiresUtc,
+                        HardwareId = hardwareId,
+                        MaxActiveUsersCount = row.MaxActiveUsersCount,
+                        IssuingUserId = issuerId,
+                        Features = product.Features.ToDictionary(
+                            f => f.FeatureId,
+                            _ => Aegis.Models.Feature.FromBool(true))
+                    };
+
+                    if (row.Type == LicenseType.Subscription && row.ExpiresUtc is { } expires)
+                    {
+                        var duration = expires - DateTime.UtcNow;
+                        if (duration <= TimeSpan.Zero)
+                        {
+                            errors.Add($"Line {row.LineNumber}: subscription ExpiresUtc must be in the future.");
+                            continue;
+                        }
+
+                        request.SubscriptionDuration = duration;
+                    }
+
+                    await LicenseService.GenerateLicenseAsync(request);
+                    created++;
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"Line {row.LineNumber}: {ex.Message}");
+                }
+            }
+
+            await LoadAsync();
+
+            var summary = $"CSV import finished. Created: {created}. Skipped (existing key): {skipped}. Failed: {errors.Count}.";
+            if (errors.Count > 0)
+                summary += "\n" + string.Join("\n", errors.Take(20));
+            if (errors.Count > 20)
+                summary += $"\n… and {errors.Count - 20} more.";
+
+            _message = summary;
+        }
+        catch (Exception ex)
+        {
+            _message = $"CSV import failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
-    private static string Csv(string value)
+    private static Product? ResolveProduct(List<Product> products, LicensesCsv.ImportRow row)
     {
-        // RFC4180-ish: quote, and escape quotes by doubling
-        value ??= string.Empty;
-        var escaped = value.Replace("\"", "\"\"");
-        return $"\"{escaped}\"";
+        if (!string.IsNullOrWhiteSpace(row.SoftwareUrn))
+        {
+            var byUrn = products.FirstOrDefault(p =>
+                string.Equals(p.SoftwareUrn, row.SoftwareUrn, StringComparison.OrdinalIgnoreCase));
+            if (byUrn != null)
+                return byUrn;
+        }
+
+        if (!string.IsNullOrWhiteSpace(row.Product))
+        {
+            return products.FirstOrDefault(p =>
+                string.Equals(p.ProductName, row.Product, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return null;
+    }
+
+    private async Task<Guid> ResolveIssuingUserIdAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var idClaim = auth.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (Guid.TryParse(idClaim, out var claimId)
+            && await Db.Users.AnyAsync(u => u.Id == claimId))
+        {
+            return claimId;
+        }
+
+        var username = auth.User.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            var userId = await Db.Users
+                .Where(u => u.Username == username)
+                .Select(u => (Guid?)u.Id)
+                .FirstOrDefaultAsync();
+            if (userId.HasValue)
+                return userId.Value;
+        }
+
+        throw new InvalidOperationException(
+            "Could not resolve the signed-in user in the database. Sign out and sign in again.");
     }
 
     private static byte[] WithUtf8Bom(byte[] bytes)
