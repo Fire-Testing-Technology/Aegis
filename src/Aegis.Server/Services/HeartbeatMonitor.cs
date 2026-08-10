@@ -5,11 +5,12 @@ using Microsoft.Extensions.Hosting;
 
 namespace Aegis.Server.Services;
 
-public class HeartbeatMonitor(IServiceProvider serviceProvider) : BackgroundService
+public class HeartbeatMonitor(IServiceProvider serviceProvider, TimeProvider? timeProvider = null) : BackgroundService
 {
     private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(5);
     private readonly TimeSpan _heartbeatTimeout = TimeSpan.FromMinutes(10);
     private readonly IServiceScopeFactory _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <summary>
     ///     Starts the background task to monitor and clean up expired activations.
@@ -33,7 +34,7 @@ public class HeartbeatMonitor(IServiceProvider serviceProvider) : BackgroundServ
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AegisDbContext>();
 
-        var timeoutThreshold = DateTime.UtcNow.Subtract(_heartbeatTimeout);
+        var timeoutThreshold = _timeProvider.GetUtcNow().UtcDateTime.Subtract(_heartbeatTimeout);
 
         try
         {

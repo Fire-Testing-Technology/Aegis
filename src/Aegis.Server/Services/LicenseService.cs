@@ -1,4 +1,4 @@
-﻿using Aegis.Enums;
+using Aegis.Enums;
 using Aegis.Exceptions;
 using Aegis.Models.License;
 using Aegis.Server.Data;
@@ -10,8 +10,20 @@ using Feature = Aegis.Models.Feature;
 
 namespace Aegis.Server.Services;
 
-public class LicenseService(AegisDbContext dbContext)
+public class LicenseService
 {
+    private readonly AegisDbContext dbContext;
+    private readonly TimeProvider _timeProvider;
+
+    public LicenseService(AegisDbContext dbContext, TimeProvider? timeProvider = null)
+    {
+        this.dbContext = dbContext;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        LicenseValidator.SetTimeProvider(_timeProvider);
+    }
+
+    private DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
+
     /// <summary>
     ///     Generates a license file asynchronously.
     /// </summary>
@@ -74,7 +86,7 @@ public class LicenseService(AegisDbContext dbContext)
         if (license == null)
             return new LicenseValidationResult(false, null, new NotFoundException("License not found."));
 
-        if ((license.ExpirationDate.HasValue && license.ExpirationDate.Value < DateTime.UtcNow) ||
+        if ((license.ExpirationDate.HasValue && license.ExpirationDate.Value < UtcNow) ||
             license.Status == LicenseStatus.Expired)
         {
             license.Status = LicenseStatus.Expired;
@@ -197,8 +209,8 @@ public class LicenseService(AegisDbContext dbContext)
                         {
                             LicenseId = license.LicenseId,
                             MachineId = hardwareId!,
-                            ActivationDate = DateTime.UtcNow,
-                            LastHeartbeat = DateTime.UtcNow
+                            ActivationDate = UtcNow,
+                            LastHeartbeat = UtcNow
                         });
 
                         license.ActiveUsersCount = currentActiveUsers + 1;
@@ -218,7 +230,7 @@ public class LicenseService(AegisDbContext dbContext)
 
                 break;
             case LicenseType.Subscription:
-                if (license.SubscriptionExpiryDate < DateTime.UtcNow)
+                if (license.SubscriptionExpiryDate < UtcNow)
                     return new LicenseActivationResult(false, new ExpiredLicenseException("Subscription has expired."));
 
                 break;
@@ -233,7 +245,7 @@ public class LicenseService(AegisDbContext dbContext)
                         LicenseId = license.LicenseId,
                         UserId = license.UserId,
                         MachineId = hardwareId!,
-                        ActivationDate = DateTime.UtcNow
+                        ActivationDate = UtcNow
                     });
 
                     license.ActiveUsersCount = activeActivations + 1;
@@ -356,7 +368,7 @@ public class LicenseService(AegisDbContext dbContext)
 
         if (license.Status == LicenseStatus.Revoked) return new LicenseRenewalResult(false, "License revoked.");
 
-        if (newExpirationDate < DateTime.UtcNow || newExpirationDate < license.SubscriptionExpiryDate)
+        if (newExpirationDate < UtcNow || newExpirationDate < license.SubscriptionExpiryDate)
             return new LicenseRenewalResult(false,
                 "New expiration date cannot be in the past or before the current expiration date.");
 
@@ -383,7 +395,7 @@ public class LicenseService(AegisDbContext dbContext)
         if (activation == null)
             return false;
 
-        activation.LastHeartbeat = DateTime.UtcNow;
+        activation.LastHeartbeat = UtcNow;
 
         dbContext.Activations.Update(activation);
         await dbContext.SaveChangesAsync();
@@ -406,7 +418,7 @@ public class LicenseService(AegisDbContext dbContext)
                 throw new NotFoundException("Feature not found for this product.");
         }
 
-        if (request.ExpirationDate.HasValue && request.ExpirationDate.Value < DateTime.UtcNow)
+        if (request.ExpirationDate.HasValue && request.ExpirationDate.Value < UtcNow)
             throw new BadRequestException("Expiration date cannot be in the past");
 
         if (request.LicenseType == LicenseType.Trial
@@ -422,10 +434,10 @@ public class LicenseService(AegisDbContext dbContext)
         // For trials, ExpirationDate on the server record stores IssuedOn + duration so the period
         // can be reconstructed; the signed file uses TrialPeriod and no fixed calendar expiry.
         DateTime? expirationDate = request.ExpirationDate;
-        DateTime issuedOn = DateTime.UtcNow;
+        DateTime issuedOn = UtcNow;
         if (request.LicenseType == LicenseType.Trial && request.TrialDuration is { } trialDuration)
         {
-            issuedOn = DateTime.UtcNow;
+            issuedOn = UtcNow;
             expirationDate = issuedOn.Add(trialDuration);
         }
 
@@ -438,7 +450,7 @@ public class LicenseService(AegisDbContext dbContext)
             IssuedOn = issuedOn,
             ExpirationDate = expirationDate,
             SubscriptionExpiryDate = request.SubscriptionDuration != null
-                ? DateTime.UtcNow.Add(request.SubscriptionDuration.Value)
+                ? UtcNow.Add(request.SubscriptionDuration.Value)
                 : null,
             HardwareId = request.HardwareId,
             UserId = request.IssuingUserId.Value,
@@ -497,7 +509,7 @@ public class LicenseService(AegisDbContext dbContext)
                 new NodeLockedLicense(baseLicense, license.HardwareId!, license.IssuedTo)),
             LicenseType.Subscription => LicenseManager.SaveLicense(new SubscriptionLicense(baseLicense,
                 license.IssuedTo,
-                license.ExpirationDate!.Value - DateTime.UtcNow)),
+                license.ExpirationDate!.Value - UtcNow)),
             LicenseType.Floating => LicenseManager.SaveLicense(new FloatingLicense(baseLicense, license.IssuedTo,
                 license.MaxActiveUsersCount!.Value)),
             LicenseType.Concurrent => LicenseManager.SaveLicense(new ConcurrentLicense(baseLicense, license.IssuedTo,
