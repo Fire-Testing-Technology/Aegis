@@ -15,6 +15,7 @@ public static class LicenseValidator
     private static readonly Dictionary<Type, IValidationRuleGroup> ValidationRuleGroups = new();
     private static ILicenseSerializer _serializer = new JsonLicenseSerializer();
     private static IHardwareIdentifier _hardwareIdentifier = new DefaultHardwareIdentifier();
+    private static TimeProvider _timeProvider = TimeProvider.System;
 
     internal static void SetSerializer(ILicenseSerializer serializer)
     {
@@ -26,6 +27,17 @@ public static class LicenseValidator
     {
         _hardwareIdentifier = hardwareIdentifier;
     }
+
+    /// <summary>
+    /// Sets the clock used for expiry and subscription checks. Defaults to <see cref="TimeProvider.System"/>.
+    /// </summary>
+    public static void SetTimeProvider(TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        _timeProvider = timeProvider;
+    }
+
+    private static DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
     public static void AddValidationRule(IValidationRule rule)
     {
@@ -69,7 +81,7 @@ public static class LicenseValidator
             return verifiedLicense.Status;
 
         if (verifiedLicense.License is not StandardLicense license ||
-            (license.ExpirationDate.HasValue && license.ExpirationDate < DateTime.UtcNow))
+            (license.ExpirationDate.HasValue && license.ExpirationDate < UtcNow))
             return LicenseStatus.Invalid;
 
         return license.UserName == userName && license.LicenseKey == licenseKey
@@ -110,7 +122,7 @@ public static class LicenseValidator
             return verifiedLicense.Status;
 
         return verifiedLicense.License is NodeLockedLicense license &&
-               (!license.ExpirationDate.HasValue || !(license.ExpirationDate < DateTime.UtcNow)) &&
+               (!license.ExpirationDate.HasValue || !(license.ExpirationDate < UtcNow)) &&
                _hardwareIdentifier.ValidateHardwareIdentifier(hardwareId ?? license.HardwareId)
             ? LicenseStatus.Valid
             : LicenseStatus.Invalid;
@@ -128,7 +140,7 @@ public static class LicenseValidator
             return verifiedLicense.Status;
 
         return verifiedLicense.License is SubscriptionLicense license &&
-               license.SubscriptionStartDate + license.SubscriptionDuration > DateTime.UtcNow &&
+               license.SubscriptionStartDate + license.SubscriptionDuration > UtcNow &&
                license.ExpirationDate == license.SubscriptionStartDate + license.SubscriptionDuration
             ? LicenseStatus.Valid
             : LicenseStatus.Expired;
