@@ -47,12 +47,12 @@ public class DbSeeder(
         {
             LicenseUtils.GenerateLicensingSecrets(DevPassphrase, secretsPath);
             logger.LogWarning(
-                "Generated licensing secrets at {Path}. Configure LicensingSecrets in appsettings for production deployments.",
+                "Generated licencing secrets at {Path}. Configure LicensingSecrets in appsettings for production deployments.",
                 secretsPath);
         }
 
         LicenseUtils.LoadLicensingSecrets(DevPassphrase, secretsPath);
-        logger.LogInformation("Aegis public key loaded for license signing from {Path}.", secretsPath);
+        logger.LogInformation("Aegis public key loaded for licence signing from {Path}.", secretsPath);
     }
 
     private async Task SeedRolesAsync()

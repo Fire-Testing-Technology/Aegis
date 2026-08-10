@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Stops and removes the Aegis Licensing Server Windows service.
+  Stops and removes the Aegis Licencing Server Windows service.
 
 .PARAMETER ServiceName
   Windows service name. Default: AegisLicensingServer

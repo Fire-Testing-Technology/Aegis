@@ -8,23 +8,23 @@
 @inject LicenseService LicenseService
 @inject IJSRuntime Js
 
-<PageTitle>View license</PageTitle>
+<PageTitle>View licence</PageTitle>
 
 @if (_loading)
 {
-    <div class="text-muted">Loading license...</div>
+    <div class="text-muted">Loading licence...</div>
 }
 else if (_license == null)
 {
-    <div class="alert alert-warning">License not found.</div>
-    <a class="btn btn-outline-secondary" href="licenses">Back to licenses</a>
+    <div class="alert alert-warning">Licence not found.</div>
+    <a class="btn btn-outline-secondary" href="licenses">Back to licences</a>
 }
 else
 {
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h1 class="mb-1">License details</h1>
-            <div class="text-muted small">License key</div>
+            <h1 class="mb-1">Licence details</h1>
+            <div class="text-muted small">Licence key</div>
             <code class="small">@_license.LicenseKey</code>
         </div>
         <div class="text-nowrap">
@@ -204,9 +204,9 @@ else
         {
             var bytes = await LicenseService.GetLicenseFileBytesAsync(_license.LicenseId);
             var base64 = Convert.ToBase64String(bytes);
-            var fileName = $"{_license.Product?.ProductName?.Replace(' ', '-') ?? "license"}-{_license.LicenseKey[..8]}.bin";
+            var fileName = $"{_license.Product?.ProductName?.Replace(' ', '-') ?? "licence"}-{_license.LicenseKey[..8]}.bin";
             await Js.InvokeVoidAsync("aegisDownloadFile", fileName, base64);
-            _message = "License file downloaded.";
+            _message = "Licence file downloaded.";
         }
         catch (Exception ex)
         {
@@ -222,7 +222,7 @@ else
         {
             var bytes = await LicenseService.GetLicenseFileBytesAsync(_license.LicenseId);
             await Js.InvokeVoidAsync("navigator.clipboard.writeText", Convert.ToBase64String(bytes));
-            _message = "License Base64 copied to clipboard.";
+            _message = "Licence Base64 copied to clipboard.";
         }
         catch (Exception ex)
         {

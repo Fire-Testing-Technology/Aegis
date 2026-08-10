@@ -16,10 +16,10 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime Js
 
-<PageTitle>Licenses</PageTitle>
+<PageTitle>Licences</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="mb-0">Licenses</h1>
+    <h1 class="mb-0">Licences</h1>
     <div class="d-flex align-items-center gap-2 flex-wrap">
         <button type="button" class="btn btn-outline-secondary" @onclick="ExportCsvAsync" disabled="@_busy">
             Export CSV
@@ -29,7 +29,7 @@
                 Import CSV
                 <InputFile OnChange="ImportCsvAsync" accept=".csv,text/csv" class="d-none" disabled="@_busy" />
             </label>
-            <a class="btn btn-primary" href="licenses/generate">Generate license</a>
+            <a class="btn btn-primary" href="licenses/generate">Generate licence</a>
         </AuthorizeView>
     </div>
 </div>
@@ -41,7 +41,7 @@
 
 @if (_licenses.Count == 0)
 {
-    <div class="alert alert-secondary">No licenses issued yet.</div>
+    <div class="alert alert-secondary">No licences issued yet.</div>
 }
 else
 {
@@ -49,7 +49,7 @@ else
         <table class="table table-striped align-middle">
             <thead>
                 <tr>
-                    <th>License key</th>
+                    <th>Licence key</th>
                     <th>Product</th>
                     <th>Type</th>
                     <th>Issued to</th>
@@ -119,9 +119,9 @@ else
         {
             var bytes = await RegenerateFileAsync(license);
             var base64 = Convert.ToBase64String(bytes);
-            var fileName = $"{license.Product?.ProductName?.Replace(' ', '-') ?? "license"}-{license.LicenseKey[..8]}.bin";
+            var fileName = $"{license.Product?.ProductName?.Replace(' ', '-') ?? "licence"}-{license.LicenseKey[..8]}.bin";
             await Js.InvokeVoidAsync("aegisDownloadFile", fileName, base64);
-            _message = $"Downloaded license file for {license.LicenseKey}.";
+            _message = $"Downloaded licence file for {license.LicenseKey}.";
         }
         catch (Exception ex)
         {
@@ -136,7 +136,7 @@ else
             var bytes = await RegenerateFileAsync(license);
             var base64 = Convert.ToBase64String(bytes);
             await Js.InvokeVoidAsync("navigator.clipboard.writeText", base64);
-            _message = "License Base64 copied to clipboard.";
+            _message = "Licence Base64 copied to clipboard.";
         }
         catch (Exception ex)
         {
@@ -175,9 +175,9 @@ else
 
             var bytes = WithUtf8Bom(Encoding.UTF8.GetBytes(csv));
             var base64 = Convert.ToBase64String(bytes);
-            var fileName = $"licenses-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv";
+            var fileName = $"licences-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv";
             await Js.InvokeVoidAsync("aegisDownloadFile", fileName, base64);
-            _message = "Exported licenses to CSV.";
+            _message = "Exported licences to CSV.";
         }
         catch (Exception ex)
         {

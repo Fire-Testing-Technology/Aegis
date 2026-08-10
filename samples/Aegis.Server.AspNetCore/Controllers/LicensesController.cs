@@ -34,10 +34,10 @@ public class LicensesController(LicenseService licenseService) : ControllerBase
         [FromForm] IFormFile? licenseFile = null)
     {
         if (string.IsNullOrEmpty(licenseKey))
-            return BadRequest("License key is required.");
+            return BadRequest("Licence key is required.");
 
         if (licenseFile == null || licenseFile.Length == 0)
-            return BadRequest("License file is required.");
+            return BadRequest("Licence file is required.");
 
         using var ms = new MemoryStream();
         await licenseFile.OpenReadStream().CopyToAsync(ms);
@@ -46,7 +46,7 @@ public class LicensesController(LicenseService licenseService) : ControllerBase
         var result = await licenseService.ValidateLicenseAsync(licenseKey, licenseFileBytes,
             JsonSerializer.Deserialize<Dictionary<string, string?>>(validationParams));
 
-        return result.IsValid ? Ok("License is valid") : BadRequest(result.Exception);
+        return result.IsValid ? Ok("Licence is valid") : BadRequest(result.Exception);
     }
 
     [HttpPost("activate")]

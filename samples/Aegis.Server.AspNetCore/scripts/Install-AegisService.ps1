@@ -10,13 +10,13 @@
   Windows service name. Default: AegisLicensingServer
 
 .PARAMETER DisplayName
-  Service display name. Default: Aegis Licensing Server
+  Service display name. Default: Aegis Licencing Server
 #>
 [CmdletBinding()]
 param(
     [string]$InstallPath = "C:\Program Files\Fire Testing Technology\Aegis",
     [string]$ServiceName = "AegisLicensingServer",
-    [string]$DisplayName = "Aegis Licensing Server"
+    [string]$DisplayName = "Aegis Licencing Server"
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,7 +45,7 @@ $dataPath = "C:\ProgramData\Fire Testing Technology\Aegis"
 New-Item -ItemType Directory -Force -Path $dataPath | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $dataPath "logs") | Out-Null
 
-$certSubject = "CN=Aegis Licensing Server"
+$certSubject = "CN=Aegis Licencing Server"
 $existingCert = Get-ChildItem Cert:\LocalMachine\My |
     Where-Object { $_.Subject -eq $certSubject } |
     Select-Object -First 1
@@ -78,7 +78,7 @@ New-Service `
     -Name $ServiceName `
     -BinaryPathName "`"$exePath`"" `
     -DisplayName $DisplayName `
-    -Description "FTT Aegis licensing admin UI and API." `
+    -Description "FTT Aegis licencing admin UI and API." `
     -StartupType Automatic | Out-Null
 
 Write-Host "Starting service $ServiceName ..."

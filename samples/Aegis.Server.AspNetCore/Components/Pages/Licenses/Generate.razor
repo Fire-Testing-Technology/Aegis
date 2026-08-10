@@ -13,9 +13,9 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime Js
 
-<PageTitle>Generate license</PageTitle>
+<PageTitle>Generate licence</PageTitle>
 
-<h1 class="mb-4">Generate license</h1>
+<h1 class="mb-4">Generate licence</h1>
 
 @if (!string.IsNullOrEmpty(_error))
 {
@@ -25,7 +25,7 @@
 @if (_generatedBytes != null)
 {
     <div class="alert alert-success">
-        <strong>License created.</strong> Key: <code>@_generatedKey</code>
+        <strong>Licence created.</strong> Key: <code>@_generatedKey</code>
         <div class="mt-2">
             <button class="btn btn-sm btn-primary me-2" @onclick="DownloadGeneratedAsync">Download .bin</button>
             <button class="btn btn-sm btn-secondary" @onclick="CopyGeneratedBase64Async">Copy Base64</button>
@@ -50,7 +50,7 @@
                 }
             </div>
             <div class="col-md-6">
-                <label class="form-label">License type</label>
+                <label class="form-label">Licence type</label>
                 <InputSelect class="form-select" @bind-Value="_request.LicenseType">
                     @foreach (var type in _selectableLicenseTypes)
                     {
@@ -119,7 +119,7 @@
         }
 
         <button type="submit" class="btn btn-primary mt-4" disabled="@_busy">
-            @(_busy ? "Generating..." : "Generate license")
+            @(_busy ? "Generating..." : "Generate licence")
         </button>
     </div>
 </EditForm>
@@ -220,9 +220,9 @@
     private static string GetLicenseTypeDescription(LicenseType type) => type switch
     {
         LicenseType.Standard =>
-            "Perpetual (or dated) license for a single user/installation. Not tied to a specific machine.",
+            "Perpetual (or dated) licence for a single user/installation. Not tied to a specific machine.",
         LicenseType.Trial =>
-            "Evaluation license. Must be applied within 24 hours of issue. The trial period then starts on the customer’s first run.",
+            "Evaluation licence. Must be applied within 24 hours of issue. The trial period then starts on the customer’s first run.",
         LicenseType.NodeLocked =>
             "Bound to one machine using the customer’s request code (hardware ID). Use this for ConeCalc and similar apps.",
         _ => string.Empty
@@ -353,7 +353,7 @@
     {
         if (_generatedBytes == null) return;
         var base64 = Convert.ToBase64String(_generatedBytes);
-        await Js.InvokeVoidAsync("aegisDownloadFile", "license.bin", base64);
+        await Js.InvokeVoidAsync("aegisDownloadFile", "licence.bin", base64);
     }
 
     private async Task CopyGeneratedBase64Async()

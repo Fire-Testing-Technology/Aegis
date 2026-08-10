@@ -31,7 +31,7 @@ public class Program
         var host = Host.CreateDefaultBuilder(args)
             .UseWindowsService(options =>
             {
-                options.ServiceName = "Aegis Licensing Server";
+                options.ServiceName = "Aegis Licencing Server";
             });
 
         // Service installs should use Production unless ASPNETCORE_ENVIRONMENT is already set.

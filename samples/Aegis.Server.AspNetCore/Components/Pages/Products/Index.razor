@@ -356,7 +356,7 @@
             await Db.SaveChangesAsync();
 
             _message = licenseLinks > 0
-                ? $"Feature '{feature.FeatureName}' removed (unlinked from {licenseLinks} license(s))."
+                ? $"Feature '{feature.FeatureName}' removed (unlinked from {licenseLinks} licence(s))."
                 : $"Feature '{feature.FeatureName}' removed.";
             await LoadFeaturesAsync();
         }

@@ -1,6 +1,6 @@
 # Running Aegis as a Windows Service
 
-The AspNetCore sample can run interactively (`dotnet run`) or as a Windows service for always-on licensing admin/API.
+The AspNetCore sample can run interactively (`dotnet run`) or as a Windows service for always-on licencing admin/API.
 
 ## What was added
 
@@ -51,7 +51,7 @@ Requires the .NET 8 runtime on the machine (`--self-contained false`). For a ful
 .\Uninstall-AegisService.ps1 -RemoveInstallPath
 ```
 
-ProgramData is left in place so licenses/users are not wiped accidentally.
+ProgramData is left in place so licences/users are not wiped accidentally.
 
 ## Service management
 
@@ -65,6 +65,6 @@ Stop-Service AegisLicensingServer
 
 - When detected as a Windows service, the host uses the **Production** environment (unless `ASPNETCORE_ENVIRONMENT` is already set).
 - Content root is pinned to the exe directory so static files and `appsettings*.json` resolve correctly (service cwd is otherwise `System32`).
-- HTTPS redirection is enabled. Production binds HTTP **8888** and HTTPS **4443**, using a LocalMachine certificate with subject `CN=Aegis Licensing Server` (`AllowInvalid` so the install script’s self-signed cert works). Replace that cert for real deployments.
+- HTTPS redirection is enabled. Production binds HTTP **8888** and HTTPS **4443**, using a LocalMachine certificate with subject `CN=Aegis Licencing Server` (`AllowInvalid` so the install script’s self-signed cert works). Replace that cert for real deployments.
 - Run the service under an account that can write to ProgramData (Local System is fine for the default install).
 - Change `JwtSettings:Secret` / `Salt` before any real deployment.

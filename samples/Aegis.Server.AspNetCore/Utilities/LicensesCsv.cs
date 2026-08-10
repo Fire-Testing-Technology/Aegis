@@ -118,7 +118,7 @@ public static class LicensesCsv
                 || !Enum.TryParse<LicenseType>(typeText, ignoreCase: true, out var type))
             {
                 throw new InvalidOperationException(
-                    $"Line {lineIndex + 1}: unknown or missing license Type '{typeText}'.");
+                    $"Line {lineIndex + 1}: unknown or missing licence Type '{typeText}'.");
             }
 
             var issuedTo = Get("IssuedTo");
