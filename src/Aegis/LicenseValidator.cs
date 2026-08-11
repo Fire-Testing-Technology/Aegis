@@ -194,30 +194,46 @@ public static class LicenseValidator
     /// <returns><see cref="LicenseLoadResult{T}"/>object indicating the validation result.</returns>
     internal static LicenseLoadResult<BaseLicense> VerifyLicenseData(byte[] licenseData)
     {
-        // Split the license data into its components
-        var (hash, signature, encryptedData, aesKey) = SplitLicenseData(licenseData);
+        try
+        {
+            if (licenseData is null || licenseData.Length < 4)
+            {
+                return new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
+                    new InvalidLicenseFormatException("License data is missing or too short."));
+            }
 
-        // Verify the RSA signature
-        if (!SecurityUtils.VerifySignature(hash, signature, LicenseUtils.GetLicensingSecrets().PublicKey))
+            // Split the license data into its components
+            var (hash, signature, encryptedData, aesKey) = SplitLicenseData(licenseData);
+
+            // Verify the RSA signature
+            if (!SecurityUtils.VerifySignature(hash, signature, LicenseUtils.GetLicensingSecrets().PublicKey))
+                return new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
+                    new InvalidLicenseSignatureException("License signature verification failed."));
+
+
+            // Calculate the SHA256 hash of the encrypted data and compare with the provided hash
+            var calculatedHash = SecurityUtils.CalculateSha256Hash(encryptedData);
+            if (!hash.SequenceEqual(calculatedHash))
+                return new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
+                    new InvalidLicenseSignatureException("License data integrity check failed."));
+
+            // Decrypt the license data using AES
+            var decryptedData = SecurityUtils.DecryptData(encryptedData, aesKey);
+
+            // Deserialize the license object
+            var license = _serializer.Deserialize(Encoding.UTF8.GetString(decryptedData));
+            return license is null
+                ? new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
+                    new LicenseValidationException("Failed to deserialize license."))
+                : new LicenseLoadResult<BaseLicense>(LicenseStatus.Valid, license);
+        }
+        catch (Exception ex) when (ex is ArgumentException or ArgumentOutOfRangeException or IndexOutOfRangeException
+                                       or OverflowException or InvalidLicenseFormatException
+                                       or FormatException or InvalidOperationException)
+        {
             return new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
-                new InvalidLicenseSignatureException("License signature verification failed."));
-
-
-        // Calculate the SHA256 hash of the encrypted data and compare with the provided hash
-        var calculatedHash = SecurityUtils.CalculateSha256Hash(encryptedData);
-        if (!hash.SequenceEqual(calculatedHash))
-            return new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
-                new InvalidLicenseSignatureException("License data integrity check failed."));
-
-        // Decrypt the license data using AES
-        var decryptedData = SecurityUtils.DecryptData(encryptedData, aesKey);
-
-        // Deserialize the license object
-        var license = _serializer.Deserialize(Encoding.UTF8.GetString(decryptedData));
-        return license is null
-            ? new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
-                new LicenseValidationException("Failed to deserialize license."))
-            : new LicenseLoadResult<BaseLicense>(LicenseStatus.Valid, license);
+                new InvalidLicenseFormatException("Invalid license format.", ex));
+        }
     }
 
     internal static (byte[] hash, byte[] signature, byte[] encryptedData, byte[] aesKey) SplitLicenseData(
