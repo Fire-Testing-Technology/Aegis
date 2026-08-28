@@ -1,13 +1,13 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Publishes Aegis.Server.AspNetCore and installs it as a Windows service.
+  Publishes Aegis.Server.AspNetCore and installs it as a Windows service (Local System, auto-start).
 
 .PARAMETER InstallPath
   Folder for the published binaries. Default: C:\Program Files\Fire Testing Technology\Aegis
 
 .PARAMETER ServiceName
-  Windows service name. Default: AegisLicensingServer
+  Windows service name (SCM). Default: AegisLicensingServer
 
 .PARAMETER DisplayName
   Service display name. Default: Aegis Licencing Server
@@ -45,22 +45,23 @@ $dataPath = "C:\ProgramData\Fire Testing Technology\Aegis"
 New-Item -ItemType Directory -Force -Path $dataPath | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $dataPath "logs") | Out-Null
 
-$certSubject = "CN=Aegis Licencing Server"
-$existingCert = Get-ChildItem Cert:\LocalMachine\My |
-    Where-Object { $_.Subject -eq $certSubject } |
-    Select-Object -First 1
-if (-not $existingCert) {
-    Write-Host "Creating self-signed HTTPS certificate ($certSubject) ..."
-    New-SelfSignedCertificate `
+$pfxPath = Join-Path $dataPath "https.pfx"
+# Must match Kestrel:Certificate:Password in appsettings.Production.json
+$pfxPasswordPlain = "aegis-https"
+if (-not (Test-Path $pfxPath)) {
+    Write-Host "Creating self-signed HTTPS certificate at $pfxPath ..."
+    $cert = New-SelfSignedCertificate `
         -DnsName "localhost", $env:COMPUTERNAME `
-        -Subject $certSubject `
+        -Subject "CN=Aegis Licencing Server" `
         -CertStoreLocation "Cert:\LocalMachine\My" `
         -KeyExportPolicy Exportable `
-        -NotAfter (Get-Date).AddYears(5) |
-        Out-Null
+        -NotAfter (Get-Date).AddYears(5)
+    $securePassword = ConvertTo-SecureString -String $pfxPasswordPlain -Force -AsPlainText
+    Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $securePassword | Out-Null
+    Remove-Item -Path "Cert:\LocalMachine\My\$($cert.Thumbprint)" -Force
 }
 else {
-    Write-Host "Using existing HTTPS certificate: $($existingCert.Thumbprint)"
+    Write-Host "Using existing HTTPS certificate file: $pfxPath"
 }
 
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -71,24 +72,39 @@ if ($existing) {
     Start-Sleep -Seconds 2
 }
 
-Write-Host "Creating service $ServiceName ..."
-# Environment is selected in Program.cs when running as a Windows service (Production).
+Write-Host "Creating Windows service $ServiceName (LocalSystem, auto-start) ..."
+# Spaces after '=' are required by sc.exe.
+# Environment is selected in Program.cs when hosted by SCM (Production).
 # Listen URLs come from appsettings.Production.json (HTTP 8888, HTTPS 4443).
-New-Service `
-    -Name $ServiceName `
-    -BinaryPathName "`"$exePath`"" `
-    -DisplayName $DisplayName `
-    -Description "FTT Aegis licencing admin UI and API." `
-    -StartupType Automatic | Out-Null
+$create = sc.exe create $ServiceName `
+    binPath= "`"$exePath`"" `
+    start= auto `
+    obj= LocalSystem `
+    DisplayName= $DisplayName
+if ($LASTEXITCODE -ne 0) {
+    throw "sc create failed: $create"
+}
+
+sc.exe description $ServiceName "FTT Aegis licencing admin UI and API." | Out-Null
+sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
+sc.exe failureflag $ServiceName 1 | Out-Null
 
 Write-Host "Starting service $ServiceName ..."
 Start-Service -Name $ServiceName
 
+$svc = Get-Service -Name $ServiceName
+if ($svc.Status -ne "Running") {
+    throw "Service installed but status is $($svc.Status). Check Event Viewer / ProgramData logs."
+}
+
 Write-Host ""
-Write-Host "Installed and started."
-Write-Host "  Service : $ServiceName"
+Write-Host "Installed and running as a Windows service."
+Write-Host "  Service : $ServiceName ($DisplayName)"
+Write-Host "  Account : LocalSystem"
+Write-Host "  Start   : Automatic"
 Write-Host "  Binary  : $exePath"
 Write-Host "  Data    : $dataPath"
+Write-Host "  HTTPS cert: $pfxPath"
 Write-Host "  HTTP    : http://localhost:8888"
 Write-Host "  HTTPS   : https://localhost:4443"
 Write-Host ""

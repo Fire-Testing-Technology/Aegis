@@ -28,28 +28,27 @@ public class Program
     {
         var isWindowsService = WindowsServiceHelpers.IsWindowsService();
 
-        var host = Host.CreateDefaultBuilder(args)
-            .UseWindowsService(options =>
-            {
-                options.ServiceName = "Aegis Licencing Server";
-            });
-
-        // Service installs should use Production unless ASPNETCORE_ENVIRONMENT is already set.
+        // Set before CreateDefaultBuilder so Production appsettings are picked up when hosted by SCM.
         if (isWindowsService
             && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")))
         {
-            host = host.UseEnvironment(Environments.Production);
+            Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", Environments.Production);
         }
 
-        return host.ConfigureWebHostDefaults(webBuilder =>
-        {
-            if (isWindowsService)
+        return Host.CreateDefaultBuilder(args)
+            .UseWindowsService(options =>
             {
-                // Service working directory is System32; pin content root to the published exe folder.
-                webBuilder.UseContentRoot(AppContext.BaseDirectory);
-            }
+                options.ServiceName = WindowsServiceInfo.ServiceName;
+            })
+            .ConfigureWebHostDefaults(webBuilder =>
+            {
+                if (isWindowsService)
+                {
+                    // Service working directory is System32; pin content root to the published exe folder.
+                    webBuilder.UseContentRoot(AppContext.BaseDirectory);
+                }
 
-            webBuilder.UseStartup<Startup>();
-        });
+                webBuilder.UseStartup<Startup>();
+            });
     }
 }

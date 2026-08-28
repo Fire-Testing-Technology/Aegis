@@ -28,6 +28,8 @@ public static class ServicePaths
 
     public static string DefaultSecretsPath => Path.Combine(DataDirectory, "aegis-signature.bin");
 
+    public static string DefaultHttpsCertificatePath => Path.Combine(DataDirectory, "https.pfx");
+
     public static string LogsDirectory
     {
         get

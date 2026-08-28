@@ -6,11 +6,12 @@ The AspNetCore sample can run interactively (`dotnet run`) or as a Windows servi
 
 | Piece | Purpose |
 |-------|---------|
-| `Microsoft.Extensions.Hosting.WindowsServices` | Host lifetime integration |
-| `Program.UseWindowsService()` | Service name + proper start/stop |
+| `Microsoft.Extensions.Hosting.WindowsServices` | Host lifetime integration with SCM |
+| `Program.UseWindowsService()` | Registers as Windows service (`AegisLicensingServer`) |
+| `WindowsServiceInfo` | Shared SCM service name / display name |
 | `ServicePaths` | SQLite/logs under ProgramData when Production or service |
 | `appsettings.Production.json` | HTTP `0.0.0.0:8888`, HTTPS `0.0.0.0:4443`, ProgramData log path |
-| `scripts/Install-AegisService.ps1` | Publish + create + start service |
+| `scripts/Install-AegisService.ps1` | Publish + create LocalSystem auto-start service + start |
 | `scripts/Uninstall-AegisService.ps1` | Stop + delete service |
 
 ## Paths
@@ -20,6 +21,7 @@ The AspNetCore sample can run interactively (`dotnet run`) or as a Windows servi
 | Binaries (default) | `C:\Program Files\Fire Testing Technology\Aegis\` |
 | Database | `C:\ProgramData\Fire Testing Technology\Aegis\aegis.db` |
 | Logs | `C:\ProgramData\Fire Testing Technology\Aegis\logs\` |
+| HTTPS certificate | `C:\ProgramData\Fire Testing Technology\Aegis\https.pfx` (Production/service) |
 | Signing secrets | `C:\ProgramData\Fire Testing Technology\Aegis\aegis-signature.bin` (Production/service) |
 
 Development still uses relative `aegis-papakura.db` / `logs/` under the content root.
@@ -63,8 +65,8 @@ Stop-Service AegisLicensingServer
 
 ## Notes
 
+- Install registers an **auto-start** Windows service under **Local System**, with restart-on-failure. The host calls `UseWindowsService()` so SCM start/stop works (do not run the published exe as a plain console for production).
 - When detected as a Windows service, the host uses the **Production** environment (unless `ASPNETCORE_ENVIRONMENT` is already set).
 - Content root is pinned to the exe directory so static files and `appsettings*.json` resolve correctly (service cwd is otherwise `System32`).
-- HTTPS redirection is enabled. Production binds HTTP **8888** and HTTPS **4443**, using a LocalMachine certificate with subject `CN=Aegis Licencing Server` (`AllowInvalid` so the install script’s self-signed cert works). Replace that cert for real deployments.
-- Run the service under an account that can write to ProgramData (Local System is fine for the default install).
+- HTTPS redirection is enabled. Production binds HTTP **8888** and HTTPS **4443**, loading `https.pfx` from ProgramData (`Kestrel:Endpoints:Https:Certificate:Path`). The install script creates a self-signed PFX there if missing (password must match `Certificate:Password` in `appsettings.Production.json`). Replace that file/password for real deployments.
 - Change `JwtSettings:Secret` / `Salt` before any real deployment.
