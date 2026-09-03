@@ -63,6 +63,7 @@ public class Startup(IConfiguration configuration, IHostEnvironment environment)
 
         services.AddScoped<AuthService>();
         services.AddScoped<CookieSignInService>();
+        services.AddScoped<ActivityLogService>();
         services.AddScoped<DbSeeder>();
         services.AddAegisServer();
         services.AddMemoryCache();

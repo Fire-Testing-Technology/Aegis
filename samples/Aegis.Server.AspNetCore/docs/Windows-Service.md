@@ -13,6 +13,7 @@ The AspNetCore sample can run interactively (`dotnet run`) or as a Windows servi
 | `appsettings.Production.json` | HTTP `0.0.0.0:8888`, HTTPS `0.0.0.0:4443`, ProgramData log path |
 | `scripts/Install-AegisService.ps1` | Publish + create LocalSystem auto-start service + start |
 | `scripts/Uninstall-AegisService.ps1` | Stop + delete service |
+| `Aegis.Server.AspNetCore.Installer` | WiX MSI (self-contained publish + `ServiceInstall`) |
 
 ## Paths
 

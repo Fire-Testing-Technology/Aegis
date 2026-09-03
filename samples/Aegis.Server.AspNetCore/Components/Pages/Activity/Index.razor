@@ -1,0 +1,62 @@
+@page "/activity"
+@attribute [Authorize(Roles = "Admin")]
+@using Aegis.Server.AspNetCore.Data.Context
+@using Aegis.Server.AspNetCore.Entities
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+
+<PageTitle>Activity log</PageTitle>
+
+<h1 class="mb-4">Activity log</h1>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>When (UTC)</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Entity</th>
+                    <th>Summary</th>
+                    <th>OK</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_entries.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="text-muted">No activity recorded yet.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var entry in _entries)
+                    {
+                        <tr>
+                            <td class="text-nowrap">@entry.OccurredAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td>@(entry.ActorUsername ?? "—")</td>
+                            <td><code>@entry.Action</code></td>
+                            <td class="text-nowrap">@entry.EntityType @if (!string.IsNullOrEmpty(entry.EntityId)) { <span class="text-muted">(@entry.EntityId)</span> }</td>
+                            <td>@(entry.Summary ?? "—")</td>
+                            <td>@(entry.Succeeded ? "Yes" : "No")</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<ActivityLog> _entries = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _entries = await Db.ActivityLogs
+            .AsNoTracking()
+            .OrderByDescending(a => a.OccurredAtUtc)
+            .Take(500)
+            .ToListAsync();
+    }
+}

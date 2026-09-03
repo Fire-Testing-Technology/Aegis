@@ -9,6 +9,16 @@ public class Program
 {
     public static async Task Main(string[] args)
     {
+        var isWindowsService = WindowsServiceHelpers.IsWindowsService();
+        if (isWindowsService
+            || string.Equals(
+                Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"),
+                Environments.Production,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            HttpsCertificate.EnsureExists();
+        }
+
         var host = CreateHostBuilder(args).Build();
 
         // Apply schema before hosted services (e.g. HeartbeatMonitor) query the DB.

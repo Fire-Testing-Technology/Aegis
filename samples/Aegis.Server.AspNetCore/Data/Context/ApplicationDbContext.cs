@@ -10,6 +10,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<User> Users { get; init; }
     public DbSet<Role> Roles { get; init; }
     public DbSet<RefreshToken> RefreshTokens { get; init; }
+    public DbSet<ActivityLog> ActivityLogs { get; init; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,6 +34,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasIndex(p => p.SoftwareUrn)
             .IsUnique();
 
-        base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<ActivityLog>()
+            .HasIndex(a => a.OccurredAtUtc);
+
+        modelBuilder.Entity<ActivityLog>()
+            .HasIndex(a => a.Action);
     }
 }

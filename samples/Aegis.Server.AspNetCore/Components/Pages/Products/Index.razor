@@ -1,10 +1,13 @@
 @page "/products"
 @attribute [Authorize(Roles = "Admin")]
 @using Aegis.Server.AspNetCore.Data.Context
+@using Aegis.Server.AspNetCore
+@using Aegis.Server.AspNetCore.Services
 @using Aegis.Server.AspNetCore.Utilities
 @using Aegis.Server.Entities
 @using Microsoft.EntityFrameworkCore
 @inject ApplicationDbContext Db
+@inject ActivityLogService ActivityLogService
 
 <PageTitle>Products</PageTitle>
 
@@ -262,18 +265,37 @@
             await Db.Products.AddAsync(product);
             await Db.SaveChangesAsync();
 
+            // Audit product creation (and default features added from the catalog).
+            await ActivityLogService.LogAsync(
+                ActivityActions.ComponentAdded,
+                entityType: "Product",
+                entityId: product.ProductId.ToString(),
+                summary: $"Product '{product.ProductName}' created.");
+
             if (catalogEntry != null)
             {
+                var defaultFeatures = new List<Feature>(catalogEntry.DefaultFeatures.Length);
                 foreach (var featureName in catalogEntry.DefaultFeatures)
                 {
-                    await Db.Features.AddAsync(new Feature
+                    var feature = new Feature
                     {
                         FeatureName = featureName,
                         ProductId = product.ProductId
-                    });
+                    };
+                    defaultFeatures.Add(feature);
+                    await Db.Features.AddAsync(feature);
                 }
 
                 await Db.SaveChangesAsync();
+
+                foreach (var feature in defaultFeatures)
+                {
+                    await ActivityLogService.LogAsync(
+                        ActivityActions.ComponentAdded,
+                        entityType: "Feature",
+                        entityId: feature.FeatureId.ToString(),
+                        summary: $"Feature '{feature.FeatureName}' added to '{product.ProductName}'.");
+                }
             }
 
             NewProduct = new NewProductModel();
@@ -309,12 +331,19 @@
             return;
         }
 
-        await Db.Features.AddAsync(new Feature
+        var feature = new Feature
         {
             FeatureName = name,
             ProductId = NewFeature.ProductId
-        });
+        };
+        await Db.Features.AddAsync(feature);
         await Db.SaveChangesAsync();
+
+        await ActivityLogService.LogAsync(
+            ActivityActions.ComponentAdded,
+            entityType: "Feature",
+            entityId: feature.FeatureId.ToString(),
+            summary: $"Feature '{feature.FeatureName}' added.");
 
         NewFeature = new NewFeatureModel { ProductId = NewFeature.ProductId };
         _message = "Feature added.";
@@ -358,6 +387,15 @@
             _message = licenseLinks > 0
                 ? $"Feature '{feature.FeatureName}' removed (unlinked from {licenseLinks} licence(s))."
                 : $"Feature '{feature.FeatureName}' removed.";
+
+            await ActivityLogService.LogAsync(
+                ActivityActions.ComponentEdited,
+                entityType: "Feature",
+                entityId: featureId.ToString(),
+                summary: licenseLinks > 0
+                    ? $"Feature '{feature.FeatureName}' removed (unlinked from {licenseLinks} licence(s))."
+                    : $"Feature '{feature.FeatureName}' removed.");
+
             await LoadFeaturesAsync();
         }
         catch (Exception ex)
