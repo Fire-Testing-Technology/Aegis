@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 
 namespace Aegis.Server.AspNetCore.Utilities;
@@ -8,10 +9,11 @@ public static class EnumExtensions
     public static string GetDisplayName(this Enum value)
     {
         var field = value.GetType().GetField(value.ToString());
-        if (field?.GetCustomAttribute<DisplayNameAttribute>() is { } attr
-            && !string.IsNullOrWhiteSpace(attr.DisplayName))
+        if (field?.GetCustomAttribute<DisplayAttribute>() is { } display)
         {
-            return attr.DisplayName;
+            var name = display.GetName();
+            if (!string.IsNullOrWhiteSpace(name))
+                return name;
         }
 
         return value.ToString();

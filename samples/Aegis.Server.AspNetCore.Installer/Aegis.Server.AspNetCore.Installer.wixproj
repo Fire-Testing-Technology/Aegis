@@ -16,7 +16,7 @@
     <OutputType>Package</OutputType>
     <AppProject>..\Aegis.Server.AspNetCore\Aegis.Server.AspNetCore.csproj</AppProject>
     <HeatExe>C:\Program Files (x86)\WiX Toolset v3.11\bin\heat.exe</HeatExe>
-    <PublishDir>$(MSBuildProjectDirectory)\..\Aegis.Server.AspNetCore\bin\Release\$(TargetFramework)\$(RuntimeIdentifier)\publish</PublishDir>
+    <PublishDir>$(MSBuildProjectDirectory)\..\Aegis.Server.AspNetCore\bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\publish</PublishDir>
     <HeatOutput>$(MSBuildProjectDirectory)\PublishFiles.g.wxs</HeatOutput>
     <SuppressValidation>True</SuppressValidation>
     <DefineSolutionProperties>false</DefineSolutionProperties>
@@ -60,7 +60,7 @@
 			WindowsServiceName=$(WindowsServiceName);
 			ServiceDisplayName=$(ServiceDisplayName);
 			ApplicationUrl=$(ApplicationUrl);
-			SourceDir=..\Aegis.Server.AspNetCore\bin\Release\$(TargetFramework)\$(RuntimeIdentifier)\publish;
+			SourceDir=..\Aegis.Server.AspNetCore\bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\publish;
 			PackagePlatform=$(Platform);
 			FullCompany=$(FullCompany);
 			LongCompany=$(LongCompany)
