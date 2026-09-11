@@ -51,7 +51,7 @@ else
                     <dd class="col-sm-8"><code>@(_license.Product?.SoftwareUrn ?? "—")</code></dd>
 
                     <dt class="col-sm-4">Type</dt>
-                    <dd class="col-sm-8">@_license.Type</dd>
+                    <dd class="col-sm-8">@_license.Type.GetDisplayName()</dd>
 
                     <dt class="col-sm-4">Issued to</dt>
                     <dd class="col-sm-8">@_license.IssuedTo</dd>

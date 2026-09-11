@@ -1,5 +1,6 @@
 @page "/users"
 @attribute [Authorize(Roles = "Admin")]
+@using Aegis.Server.AspNetCore
 @using Aegis.Server.AspNetCore.Data.Context
 @using Aegis.Server.AspNetCore.DTOs
 @using Aegis.Server.AspNetCore.Entities
@@ -9,6 +10,7 @@
 @using System.ComponentModel.DataAnnotations
 @inject ApplicationDbContext Db
 @inject AuthService AuthService
+@inject ActivityLogService ActivityLogService
 
 <PageTitle>Users</PageTitle>
 
@@ -243,6 +245,10 @@
         var success = await AuthService.RegisterAsync(NewUser);
         if (success)
         {
+            await ActivityLogService.LogAsync(
+                ActivityActions.UserCreated,
+                "User",
+                summary: $"Created user '{NewUser.Username}' with role '{NewUser.Role}'.");
             _message = $"User '{NewUser.Username}' created.";
             NewUser = new RegisterDto { Role = _roles.FirstOrDefault()?.Name ?? "User" };
             await LoadAsync();
@@ -350,6 +356,11 @@
 
             await Db.SaveChangesAsync();
 
+            await ActivityLogService.LogAsync(
+                ActivityActions.UserEdited,
+                "User",
+                entityId: user.Id.ToString(),
+                summary: $"Edited user '{user.Username}'.");
             _message = $"User '{user.Username}' updated.";
             _editing = null;
             await LoadAsync();
@@ -407,9 +418,16 @@
                 return;
             }
 
+            var deletedId = user.Id.ToString();
+            var deletedName = user.Username;
             Db.Users.Remove(user);
             await Db.SaveChangesAsync();
-            _message = $"User '{user.Username}' deleted.";
+            await ActivityLogService.LogAsync(
+                ActivityActions.UserDeleted,
+                "User",
+                entityId: deletedId,
+                summary: $"Deleted user '{deletedName}'.");
+            _message = $"User '{deletedName}' deleted.";
             _deleting = null;
             await LoadAsync();
         }

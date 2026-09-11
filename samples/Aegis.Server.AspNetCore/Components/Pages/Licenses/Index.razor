@@ -64,7 +64,7 @@ else
                     <tr>
                         <td><code class="small">@license.LicenseKey</code></td>
                         <td>@license.Product?.ProductName</td>
-                        <td>@license.Type</td>
+                        <td>@license.Type.GetDisplayName()</td>
                         <td>@license.IssuedTo</td>
                         <td>
                             <span class="badge @StatusBadgeClass(license.Status)">@license.Status</span>
