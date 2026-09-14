@@ -12,6 +12,10 @@ public class LicenseGenerationRequest
     public int? MaxActiveUsersCount { get; set; }
     public string? HardwareId { get; set; }
     public TimeSpan? SubscriptionDuration { get; set; }
+    /// <summary>
+    /// Length of a trial measured from first client activation (not from issue date).
+    /// </summary>
+    public TimeSpan? TrialDuration { get; set; }
     public Guid? IssuingUserId { get; set; }
     public Dictionary<Guid, Feature> Features { get; set; } = [];
 }

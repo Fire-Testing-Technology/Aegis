@@ -123,19 +123,19 @@ public class LicenseValidatorTests
     }
 
     [Fact]
-    public void ValidateTrialLicense_ReturnsFalse_ForExpiredLicense()
+    public void ValidateTrialLicense_IgnoresPastExpirationDate_WhenTrialPeriodRemains()
     {
-        // Arrange
+        // Arrange — calendar expiry in the file is not used; first-run expiry is client-side.
         LoadSecretKeys();
         var license = GenerateTrialLicense(TimeSpan.FromDays(7));
-        license.ExpirationDate = DateTime.UtcNow.Subtract(TimeSpan.FromDays(1)); 
-        var licenseData = LicenseManager.SaveLicense(license); 
+        license.ExpirationDate = DateTime.UtcNow.Subtract(TimeSpan.FromDays(1));
+        var licenseData = LicenseManager.SaveLicense(license);
 
         // Act
         var isValid = LicenseValidator.ValidateTrialLicense(licenseData);
 
         // Assert
-        Assert.NotEqual(LicenseStatus.Valid, isValid);
+        Assert.Equal(LicenseStatus.Valid, isValid);
     }
 
     [Fact]

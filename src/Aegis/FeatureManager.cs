@@ -6,7 +6,9 @@ namespace Aegis;
 
 public static class FeatureManager
 {
-    private static readonly ThreadLocal<BaseLicense?> CurrentLicense = new();
+    // Process-wide: must not be ThreadLocal. Licence validation often runs on a
+    // background thread (e.g. hosted monitor), while feature checks run on the UI thread.
+    private static BaseLicense? _currentLicense;
 
     /// <summary>
     /// Sets the current license.
@@ -14,7 +16,7 @@ public static class FeatureManager
     /// <param name="license">The license to set.</param>
     internal static void SetLicense(BaseLicense? license)
     {
-        CurrentLicense.Value = license;
+        _currentLicense = license;
     }
 
     /// <summary>
@@ -22,7 +24,7 @@ public static class FeatureManager
     /// </summary>
     internal static void ClearLicense()
     {
-        CurrentLicense.Value = null;
+        _currentLicense = null;
     }
 
     /// <summary>
@@ -32,8 +34,8 @@ public static class FeatureManager
     /// <returns>True if the feature is enabled, false otherwise.</returns>
     public static bool IsFeatureEnabled(string featureName)
     {
-        if (CurrentLicense.Value == null ||
-            CurrentLicense.Value.Features.TryGetValue(featureName, out var featureValue) == false)
+        if (_currentLicense == null ||
+            _currentLicense.Features.TryGetValue(featureName, out var featureValue) == false)
             return false;
 
         return featureValue.Type switch
@@ -55,7 +57,7 @@ public static class FeatureManager
     /// <returns>The integer value of the feature, or default if the feature is not found or not an integer.</returns>
     public static int GetFeatureInt(string featureName)
     {
-        return CurrentLicense.Value?.Features.TryGetValue(featureName, out var featureValue) == true &&
+        return _currentLicense?.Features.TryGetValue(featureName, out var featureValue) == true &&
                featureValue.Type == FeatureValueType.Integer
             ? featureValue.AsInt()
             : default;
@@ -68,7 +70,7 @@ public static class FeatureManager
     /// <returns>The float value of the feature, or default if the feature is not found or not a float.</returns>
     public static float GetFeatureFloat(string featureName)
     {
-        return CurrentLicense.Value?.Features.TryGetValue(featureName, out var featureValue) == true &&
+        return _currentLicense?.Features.TryGetValue(featureName, out var featureValue) == true &&
                featureValue.Type == FeatureValueType.Float
             ? featureValue.AsFloat()
             : default;
@@ -81,7 +83,7 @@ public static class FeatureManager
     /// <returns>The string value of the feature, or default if the feature is not found or not a string.</returns>
     public static string GetFeatureString(string featureName)
     {
-        return CurrentLicense.Value?.Features.TryGetValue(featureName, out var featureValue) == true &&
+        return _currentLicense?.Features.TryGetValue(featureName, out var featureValue) == true &&
                featureValue.Type == FeatureValueType.String
             ? featureValue.AsString()
             : default!;
@@ -94,7 +96,7 @@ public static class FeatureManager
     /// <returns>The DateTime value of the feature, or default if the feature is not found or not a DateTime.</returns>
     public static DateTime GetFeatureDateTime(string featureName)
     {
-        return CurrentLicense.Value?.Features.TryGetValue(featureName, out var featureValue) == true &&
+        return _currentLicense?.Features.TryGetValue(featureName, out var featureValue) == true &&
                featureValue.Type == FeatureValueType.DateTime
             ? featureValue.AsDateTime()
             : default;
@@ -107,7 +109,7 @@ public static class FeatureManager
     /// <returns>The byte array value of the feature, or default if the feature is not found or not a byte array.</returns>
     public static byte[] GetFeatureByteArray(string featureName)
     {
-        return CurrentLicense.Value?.Features.TryGetValue(featureName, out var featureValue) == true &&
+        return _currentLicense?.Features.TryGetValue(featureName, out var featureValue) == true &&
                featureValue.Type == FeatureValueType.ByteArray
             ? featureValue.AsByteArray()
             : default!;

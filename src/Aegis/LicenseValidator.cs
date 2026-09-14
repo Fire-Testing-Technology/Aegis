@@ -15,6 +15,7 @@ public static class LicenseValidator
     private static readonly Dictionary<Type, IValidationRuleGroup> ValidationRuleGroups = new();
     private static ILicenseSerializer _serializer = new JsonLicenseSerializer();
     private static IHardwareIdentifier _hardwareIdentifier = new DefaultHardwareIdentifier();
+    private static TimeProvider _timeProvider = TimeProvider.System;
 
     internal static void SetSerializer(ILicenseSerializer serializer)
     {
@@ -26,6 +27,17 @@ public static class LicenseValidator
     {
         _hardwareIdentifier = hardwareIdentifier;
     }
+
+    /// <summary>
+    /// Sets the clock used for expiry and subscription checks. Defaults to <see cref="TimeProvider.System"/>.
+    /// </summary>
+    public static void SetTimeProvider(TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        _timeProvider = timeProvider;
+    }
+
+    private static DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
     public static void AddValidationRule(IValidationRule rule)
     {
@@ -69,7 +81,7 @@ public static class LicenseValidator
             return verifiedLicense.Status;
 
         if (verifiedLicense.License is not StandardLicense license ||
-            (license.ExpirationDate.HasValue && license.ExpirationDate < DateTime.UtcNow))
+            (license.ExpirationDate.HasValue && license.ExpirationDate < UtcNow))
             return LicenseStatus.Invalid;
 
         return license.UserName == userName && license.LicenseKey == licenseKey
@@ -78,7 +90,8 @@ public static class LicenseValidator
     }
 
     /// <summary>
-    ///     Validates a trial license.
+    ///     Validates a trial license signature and period metadata.
+    ///     Calendar expiry is enforced on the client from first activation + <see cref="TrialLicense.TrialPeriod"/>.
     /// </summary>
     /// <param name="licenseData">The raw license data.</param>
     /// <returns>True if the license is valid, false otherwise.</returns>
@@ -88,11 +101,9 @@ public static class LicenseValidator
         if (verifiedLicense.Status != LicenseStatus.Valid)
             return verifiedLicense.Status;
 
-        return verifiedLicense.License is TrialLicense license && license.ExpirationDate > DateTime.UtcNow &&
-               license.TrialPeriod > TimeSpan.Zero &&
-               license.IssuedOn + license.TrialPeriod > DateTime.UtcNow
+        return verifiedLicense.License is TrialLicense { TrialPeriod: { Ticks: > 0 } }
             ? LicenseStatus.Valid
-            : LicenseStatus.Expired;
+            : LicenseStatus.Invalid;
     }
 
     /// <summary>
@@ -111,7 +122,7 @@ public static class LicenseValidator
             return verifiedLicense.Status;
 
         return verifiedLicense.License is NodeLockedLicense license &&
-               (!license.ExpirationDate.HasValue || !(license.ExpirationDate < DateTime.UtcNow)) &&
+               (!license.ExpirationDate.HasValue || !(license.ExpirationDate < UtcNow)) &&
                _hardwareIdentifier.ValidateHardwareIdentifier(hardwareId ?? license.HardwareId)
             ? LicenseStatus.Valid
             : LicenseStatus.Invalid;
@@ -129,7 +140,7 @@ public static class LicenseValidator
             return verifiedLicense.Status;
 
         return verifiedLicense.License is SubscriptionLicense license &&
-               license.SubscriptionStartDate + license.SubscriptionDuration > DateTime.UtcNow &&
+               license.SubscriptionStartDate + license.SubscriptionDuration > UtcNow &&
                license.ExpirationDate == license.SubscriptionStartDate + license.SubscriptionDuration
             ? LicenseStatus.Valid
             : LicenseStatus.Expired;
@@ -183,30 +194,46 @@ public static class LicenseValidator
     /// <returns><see cref="LicenseLoadResult{T}"/>object indicating the validation result.</returns>
     internal static LicenseLoadResult<BaseLicense> VerifyLicenseData(byte[] licenseData)
     {
-        // Split the license data into its components
-        var (hash, signature, encryptedData, aesKey) = SplitLicenseData(licenseData);
+        try
+        {
+            if (licenseData is null || licenseData.Length < 4)
+            {
+                return new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
+                    new InvalidLicenseFormatException("License data is missing or too short."));
+            }
 
-        // Verify the RSA signature
-        if (!SecurityUtils.VerifySignature(hash, signature, LicenseUtils.GetLicensingSecrets().PublicKey))
+            // Split the license data into its components
+            var (hash, signature, encryptedData, aesKey) = SplitLicenseData(licenseData);
+
+            // Verify the RSA signature
+            if (!SecurityUtils.VerifySignature(hash, signature, LicenseUtils.GetLicensingSecrets().PublicKey))
+                return new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
+                    new InvalidLicenseSignatureException("License signature verification failed."));
+
+
+            // Calculate the SHA256 hash of the encrypted data and compare with the provided hash
+            var calculatedHash = SecurityUtils.CalculateSha256Hash(encryptedData);
+            if (!hash.SequenceEqual(calculatedHash))
+                return new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
+                    new InvalidLicenseSignatureException("License data integrity check failed."));
+
+            // Decrypt the license data using AES
+            var decryptedData = SecurityUtils.DecryptData(encryptedData, aesKey);
+
+            // Deserialize the license object
+            var license = _serializer.Deserialize(Encoding.UTF8.GetString(decryptedData));
+            return license is null
+                ? new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
+                    new LicenseValidationException("Failed to deserialize license."))
+                : new LicenseLoadResult<BaseLicense>(LicenseStatus.Valid, license);
+        }
+        catch (Exception ex) when (ex is ArgumentException or ArgumentOutOfRangeException or IndexOutOfRangeException
+                                       or OverflowException or InvalidLicenseFormatException
+                                       or FormatException or InvalidOperationException)
+        {
             return new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
-                new InvalidLicenseSignatureException("License signature verification failed."));
-
-
-        // Calculate the SHA256 hash of the encrypted data and compare with the provided hash
-        var calculatedHash = SecurityUtils.CalculateSha256Hash(encryptedData);
-        if (!hash.SequenceEqual(calculatedHash))
-            return new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
-                new InvalidLicenseSignatureException("License data integrity check failed."));
-
-        // Decrypt the license data using AES
-        var decryptedData = SecurityUtils.DecryptData(encryptedData, aesKey);
-
-        // Deserialize the license object
-        var license = _serializer.Deserialize(Encoding.UTF8.GetString(decryptedData));
-        return license is null
-            ? new LicenseLoadResult<BaseLicense>(LicenseStatus.Invalid, null,
-                new LicenseValidationException("Failed to deserialize license."))
-            : new LicenseLoadResult<BaseLicense>(LicenseStatus.Valid, license);
+                new InvalidLicenseFormatException("Invalid license format.", ex));
+        }
     }
 
     internal static (byte[] hash, byte[] signature, byte[] encryptedData, byte[] aesKey) SplitLicenseData(
