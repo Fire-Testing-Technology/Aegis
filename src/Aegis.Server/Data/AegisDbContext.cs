@@ -22,9 +22,10 @@ public class AegisDbContext(DbContextOptions options) : DbContext(options)
             .WithMany(p => p.Licenses)
             .HasForeignKey(l => l.ProductId);
 
-        // LicenseFeature (Many-to-Many) - Configure composite key
+        // LicenseFeature - each licence owns its own feature rows, so the key includes the licence.
+        // (if it were Keyed on product and feature alone, a second licence for the same product could not have its own row.)
         modelBuilder.Entity<LicenseFeature>()
-            .HasKey(lf => new { lf.ProductId, lf.FeatureId });
+            .HasKey(lf => new { lf.LicenseId, lf.FeatureId });
         
         /*
         // Configure LicenseFeature entity
