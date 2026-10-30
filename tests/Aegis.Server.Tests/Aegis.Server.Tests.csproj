@@ -24,7 +24,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Aegis.Server.AspNetCore\Aegis.Server.AspNetCore.csproj"/>
+        <ProjectReference Include="..\..\src\Aegis.Server\Aegis.Server.csproj"/>
     </ItemGroup>
 
 </Project>

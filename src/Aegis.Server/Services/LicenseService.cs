@@ -36,20 +36,21 @@ public class LicenseService
         // 1. Validate the request
         await ValidateLicenseGenerationRequestAsync(request);
 
-        // 2. Create the License entity
-        var license = CreateLicenseEntity(request);
+        // 2. Create the License entity, with its product (the signed file needs the SoftwareUrn)
+        var product = await dbContext.Products.FirstAsync(p => p.ProductId == request.ProductId);
+        var license = CreateLicenseEntity(request, product);
 
-        // 3. Add features to the license
+        // 3. Give the license its own feature rows
         await AddFeaturesToLicenseAsync(license, request);
 
-        // 4. Save to the database 
+        // 4. Build the signed file before saving anything, so a failure leaves nothing in the database
+        var licenseFile = GenerateLicenseFile(license);
+
+        // 5. Save to the database
         await dbContext.Licenses.AddAsync(license);
         await dbContext.SaveChangesAsync();
 
-        // Ensure product (and SoftwareUrn) is available when building the signed file.
-        await dbContext.Entry(license).Reference(l => l.Product).LoadAsync();
-
-        return GenerateLicenseFile(license);
+        return licenseFile;
     }
 
     /// <summary>
@@ -426,7 +427,7 @@ public class LicenseService
             throw new BadRequestException("Trial licenses require a positive TrialDuration (from first client activation).");
     }
 
-    private License CreateLicenseEntity(LicenseGenerationRequest request)
+    private License CreateLicenseEntity(LicenseGenerationRequest request, Product product)
     {
         if (request.IssuingUserId is null || request.IssuingUserId == Guid.Empty)
             throw new BadRequestException("Issuing user is required to generate a license.");
@@ -445,6 +446,7 @@ public class LicenseService
         {
             Type = request.LicenseType,
             ProductId = request.ProductId,
+            Product = product,
             IssuedTo = request.IssuedTo,
             MaxActiveUsersCount = request.MaxActiveUsersCount,
             IssuedOn = issuedOn,
@@ -462,38 +464,23 @@ public class LicenseService
     {
         if (request.Features.Count == 0) return;
 
+        // Every license gets its own LicenseFeature rows. They are never shared with, or taken from, another license.
         foreach (var featureData in request.Features)
         {
-            var licenseFeature = await dbContext.LicenseFeatures
-                .FirstOrDefaultAsync(lf => lf.ProductId == request.ProductId && lf.FeatureId == featureData.Key);
+            var feature = await dbContext.Features.FirstAsync(f => f.FeatureId == featureData.Key);
 
-            if (licenseFeature == null)
+            license.LicenseFeatures.Add(new LicenseFeature
             {
-                var product = await dbContext.Products.FirstAsync(p => p.ProductId == request.ProductId);
-                var feature = await dbContext.Features.FirstAsync(f => f.FeatureId == featureData.Key);
-
-                licenseFeature = new LicenseFeature
-                {
-                    ProductId = product.ProductId,
-                    FeatureId = feature.FeatureId,
-                    LicenseId = license.LicenseId,
-                    Product = product,
-                    Feature = feature,
-                    License = license,
-                    IsEnabled = true,
-                    Type = featureData.Value.Type,
-                    Data = featureData.Value.Data
-                };
-
-                license.LicenseFeatures.Add(licenseFeature);
-            }
-            else
-            {
-                licenseFeature.IsEnabled = true;
-                licenseFeature.License = license;
-                licenseFeature.Type = featureData.Value.Type;
-                licenseFeature.Data = featureData.Value.Data;
-            }
+                ProductId = license.Product.ProductId,
+                FeatureId = feature.FeatureId,
+                LicenseId = license.LicenseId,
+                Product = license.Product,
+                Feature = feature,
+                License = license,
+                IsEnabled = true,
+                Type = featureData.Value.Type,
+                Data = featureData.Value.Data
+            });
         }
     }
 

@@ -44,11 +44,6 @@ public class LicenseServiceTests
         _dbContext.Features.Add(new Feature { FeatureId = Guid.NewGuid(), FeatureName = "Feature 2", ProductId = product.ProductId });
         _dbContext.Features.Add(new Feature { FeatureId = Guid.NewGuid(), FeatureName = "Feature 3", ProductId = product.ProductId });
         _dbContext.SaveChanges();
-        _dbContext.LicenseFeatures.Add(new LicenseFeature
-            { ProductId = _dbContext.Products.First().ProductId, FeatureId = _dbContext.Features.First().FeatureId });
-        _dbContext.LicenseFeatures.Add(new LicenseFeature
-            { ProductId = _dbContext.Products.First().ProductId, FeatureId = _dbContext.Features.Last().FeatureId });
-        _dbContext.SaveChanges();
     }
 
     private void LoadSecretKeys()
@@ -64,7 +59,7 @@ public class LicenseServiceTests
         string? hardwareId = null, int? maxActivations = null)
     {
         var productId = _dbContext.Products.First().ProductId;
-        var licenseFeature = _dbContext.LicenseFeatures.First();
+        var feature = _dbContext.Features.First();
         var license = new License
         {
             Type = licenseType,
@@ -75,7 +70,7 @@ public class LicenseServiceTests
             IssuedOn = DateTime.UtcNow,
             ExpirationDate = expirationDate,
             SubscriptionExpiryDate = licenseType == LicenseType.Subscription ? expirationDate : null,
-            LicenseFeatures = [licenseFeature]
+            LicenseFeatures = [new LicenseFeature { ProductId = productId, FeatureId = feature.FeatureId, Feature = feature, IsEnabled = true }]
         };
 
         _dbContext.Licenses.Add(license);
@@ -128,6 +123,7 @@ public class LicenseServiceTests
             ExpirationDate = DateTime.UtcNow.AddDays(30),
             ProductId = productId,
             IssuedTo = "Test User",
+            IssuingUserId = Guid.NewGuid(),
             Features = new Dictionary<Guid, Models.Feature>
             {
                 { featureId[0], Models.Feature.FromBool(true) },
@@ -149,6 +145,96 @@ public class LicenseServiceTests
         Assert.NotNull(license.License);
         Assert.Equal(request.LicenseType, license.License.Type);
         Assert.Equal(request.ExpirationDate!.Value, license.License.ExpirationDate);
+    }
+
+    [Fact]
+    public async Task GenerateLicenseAsync_SecondLicenseForSameProduct_LeavesBothLicensesWithTheirFeatures()
+    {
+        // Arrange
+        var request = StandardRequestWithFirstTwoFeatures();
+
+        // Act
+        await _licenseService.GenerateLicenseAsync(request);
+        await _licenseService.GenerateLicenseAsync(request);
+
+        // Assert: read back from the store, not from the change tracker
+        _dbContext.ChangeTracker.Clear();
+        var licenses = await _dbContext.Licenses
+            .Include(l => l.LicenseFeatures).ThenInclude(lf => lf.Feature)
+            .ToListAsync();
+
+        Assert.Equal(2, licenses.Count);
+        foreach (var license in licenses)
+        {
+            var names = license.LicenseFeatures.Select(lf => lf.Feature.FeatureName).OrderBy(n => n).ToArray();
+            Assert.Equal(["Feature 1", "Feature 2"], names);
+        }
+    }
+
+    [Fact]
+    public async Task GetLicenseFileBytesAsync_AfterAnotherLicenseIsIssued_StillContainsTheFeatures()
+    {
+        // Arrange
+        var request = StandardRequestWithFirstTwoFeatures();
+        var firstFile = await _licenseService.GenerateLicenseAsync(request);
+        var firstLicenseId = (await LicenseManager.LoadLicenseAsync(firstFile)).License!.LicenseId;
+        await _licenseService.GenerateLicenseAsync(request);
+        _dbContext.ChangeTracker.Clear();
+
+        // Act: rebuild the first license's file from the database, as the Licences page does
+        var rebuilt = await _licenseService.GetLicenseFileBytesAsync(firstLicenseId);
+
+        // Assert
+        var loaded = await LicenseManager.LoadLicenseAsync(rebuilt);
+        Assert.Equal(LicenseStatus.Valid, loaded.Status);
+        Assert.Equal(["Feature 1", "Feature 2"], loaded.License!.Features.Keys.OrderBy(n => n).ToArray());
+    }
+
+    [Fact]
+    public async Task GenerateLicenseAsync_WhenTheFileCannotBeBuilt_LeavesNothingBehind()
+    {
+        // Arrange: a product with no SoftwareUrn cannot be signed into a license file
+        var product = new Product { ProductId = Guid.NewGuid(), ProductName = "No URN", SoftwareUrn = "" };
+        var feature = new Feature { FeatureId = Guid.NewGuid(), FeatureName = "Orphan", ProductId = product.ProductId };
+        _dbContext.Products.Add(product);
+        _dbContext.Features.Add(feature);
+        await _dbContext.SaveChangesAsync();
+
+        var request = new LicenseGenerationRequest
+        {
+            LicenseType = LicenseType.Standard,
+            ExpirationDate = DateTime.UtcNow.AddDays(30),
+            ProductId = product.ProductId,
+            IssuedTo = "Test User",
+            IssuingUserId = Guid.NewGuid(),
+            Features = new Dictionary<Guid, Models.Feature> { { feature.FeatureId, Models.Feature.FromBool(true) } }
+        };
+
+        // Act
+        await Assert.ThrowsAsync<InvalidLicenseFormatException>(() => _licenseService.GenerateLicenseAsync(request));
+
+        // Assert
+        _dbContext.ChangeTracker.Clear();
+        Assert.Empty(await _dbContext.Licenses.Where(l => l.ProductId == product.ProductId).ToListAsync());
+        Assert.Empty(await _dbContext.LicenseFeatures.Where(lf => lf.ProductId == product.ProductId).ToListAsync());
+    }
+
+    private LicenseGenerationRequest StandardRequestWithFirstTwoFeatures()
+    {
+        var featureIds = _dbContext.Features.OrderBy(f => f.FeatureName).Select(f => f.FeatureId).Take(2).ToArray();
+        return new LicenseGenerationRequest
+        {
+            LicenseType = LicenseType.Standard,
+            ExpirationDate = DateTime.UtcNow.AddDays(30),
+            ProductId = _dbContext.Products.First().ProductId,
+            IssuedTo = "Test User",
+            IssuingUserId = Guid.NewGuid(),
+            Features = new Dictionary<Guid, Models.Feature>
+            {
+                { featureIds[0], Models.Feature.FromBool(true) },
+                { featureIds[1], Models.Feature.FromBool(true) }
+            }
+        };
     }
 
     [Fact]
